@@ -1,4 +1,4 @@
-import { LayoutDashboard, Paperclip, Receipt, Send, Sparkles } from "lucide-react";
+import { LayoutDashboard, Mic, Paperclip, Receipt, Send, Sparkles, Square, Volume2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { Facts } from "../lib/analyse";
 import { naira, prettyDate } from "../lib/format";
@@ -50,6 +50,11 @@ export default function Ask({ txns, name, language, facts, sheet, insights, over
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const end = useRef<HTMLDivElement>(null);
+  const [listening, setListening] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognition = useRef<any>(null);
+  const askRef = useRef<(q: string) => void>(() => {});
 
   // New data starts a fresh conversation.
   useEffect(() => {
@@ -86,6 +91,66 @@ export default function Ask({ txns, name, language, facts, sheet, insights, over
     }
     setMsgs((m) => [...m, reply]);
     setBusy(false);
+  }
+
+  askRef.current = ask;
+
+  // Voice input: the browser's own speech-to-text (Chrome, Edge, Safari). Speak, and the question is sent when you stop.
+  function toggleVoice() {
+    setVoiceError(null);
+    if (listening) {
+      recognition.current?.stop();
+      return;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    const SpeechRecognition = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setVoiceError("Voice input isn’t supported in this browser. Try Chrome or Edge.");
+      return;
+    }
+    const rec = new SpeechRecognition();
+    rec.lang = "en-NG";
+    rec.interimResults = true;
+    rec.continuous = false;
+    let finalText = "";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onresult = (e: any) => {
+      let text = "";
+      for (let i = 0; i < e.results.length; i++) {
+        text += e.results[i][0].transcript;
+        if (e.results[i].isFinal) finalText = text;
+      }
+      setInput(text);
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onerror = (e: any) => {
+      setVoiceError(
+        e.error === "not-allowed" || e.error === "service-not-allowed"
+          ? "Allow microphone access in your browser to talk to Pally."
+          : e.error === "no-speech"
+            ? "I didn’t hear anything. Tap the mic and try again."
+            : "Voice input stopped. Please try again.",
+      );
+    };
+    rec.onend = () => {
+      setListening(false);
+      recognition.current = null;
+      if (finalText.trim()) askRef.current(finalText.trim());
+    };
+    recognition.current = rec;
+    setInput("");
+    setListening(true);
+    rec.start();
+  }
+
+  // Reads one of Pally's answers aloud.
+  function speak(text: string) {
+    if (!("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text.replace(/\*\*/g, ""));
+    u.lang = "en-NG";
+    window.speechSynthesis.speak(u);
   }
 
   const lastFollowups = [...msgs].reverse().find((m) => m.role === "assistant")?.followups ?? (msgs.length ? [] : STARTERS);
@@ -142,6 +207,16 @@ export default function Ask({ txns, name, language, facts, sheet, insights, over
               <div className="whitespace-pre-wrap">
                 <RichText text={m.text} />
               </div>
+              {m.role === "assistant" && (
+                <button
+                  type="button"
+                  onClick={() => speak(m.text)}
+                  className="mt-1 flex items-center gap-1 text-xs font-semibold text-pp"
+                  aria-label="Read this answer aloud"
+                >
+                  <Volume2 size={14} /> Listen
+                </button>
+              )}
               {m.evidence && m.evidence.length > 0 && (
                 <div className="mt-2 rounded-xl bg-pp-soft/60 p-2">
                   <div className="mb-1 flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-pp">
@@ -181,6 +256,7 @@ export default function Ask({ txns, name, language, facts, sheet, insights, over
         )}
         <div ref={end} className="h-16" />
       </div>
+      {voiceError && <p className="sticky bottom-36 rounded-xl bg-bad-soft px-3 py-2 text-xs font-semibold text-bad">{voiceError}</p>}
       <form
         className="sticky bottom-20 mt-4 flex gap-2"
         onSubmit={(e) => {
@@ -200,9 +276,21 @@ export default function Ask({ txns, name, language, facts, sheet, insights, over
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask Pally about your money…"
-          className="min-w-0 flex-1 rounded-full border border-pp/20 bg-white px-4 py-3 text-sm shadow-card outline-none focus:border-pp"
+          placeholder={listening ? "Listening… speak now" : "Ask Pally about your money…"}
+          className={`min-w-0 flex-1 rounded-full border bg-white px-4 py-3 text-sm shadow-card outline-none focus:border-pp ${listening ? "border-bad" : "border-pp/20"}`}
         />
+        <button
+          type="button"
+          onClick={toggleVoice}
+          disabled={busy}
+          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full shadow-card disabled:opacity-50 ${
+            listening ? "animate-pulse bg-bad text-white" : "bg-white text-pp"
+          }`}
+          aria-label={listening ? "Stop recording" : "Ask by voice"}
+          title={listening ? "Stop recording" : "Ask by voice"}
+        >
+          {listening ? <Square size={16} /> : <Mic size={18} />}
+        </button>
         <button disabled={busy} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-pp text-white disabled:opacity-50" aria-label="Send">
           <Send size={18} />
         </button>
