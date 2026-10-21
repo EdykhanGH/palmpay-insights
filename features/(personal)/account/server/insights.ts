@@ -14,7 +14,7 @@ export default async function handler(req: Req, res: Res) {
 Write a short personal note:
 - 1 opening sentence on how this month is going (warm, direct, use their name).
 - Then exactly 3 bullet points starting with "• ", each one specific, actionable step with a naira amount from the facts. Mention a PalmPay feature (CashBox savings, QR pay, bill payments, spending limits) where it genuinely fits.
-Use ONLY numbers that appear in the facts. Never invent numbers or do new arithmetic. Under 110 words. Amounts as ₦12,500.
+Use ONLY numbers that appear in the facts. Never invent numbers or do new arithmetic. Under 110 words. Plain text only: no markdown except the "• " bullets. Amounts as ₦12,500.
 ${language === "pidgin" ? "Write in friendly Nigerian Pidgin English." : "Write in simple, plain English."}`,
       messages: [{ role: "user", content: `Name: ${name ?? "there"}\nFacts:\n${JSON.stringify(facts)}` }],
     });

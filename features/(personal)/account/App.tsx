@@ -4,7 +4,7 @@ import { ArrowLeft, ChevronRight, Home as HomeIcon, LayoutDashboard, Languages, 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Ask, { type PendingQuestion } from "./components/Ask";
 import { CategoryBars, MonthlyBars } from "./components/Charts";
-import { InsightCard, ScoreRing, Section } from "./components/ui";
+import { InsightCard, RichText, ScoreRing, Section } from "./components/ui";
 import { accountFor, maskPhone } from "./lib/accounts";
 import { buildInsights, computeFacts, factSheet, perMonth } from "./lib/analyse";
 import { monthName, naira, prettyDate } from "./lib/format";
@@ -186,7 +186,9 @@ function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void
                   <div className="h-3 w-4/6 animate-pulse rounded bg-pp-soft" />
                 </div>
               ) : (
-                <p className="mt-2 whitespace-pre-line text-sm leading-relaxed">{note ?? fallbackNote}</p>
+                <p className="mt-2 whitespace-pre-line text-sm leading-relaxed">
+                  <RichText text={note ?? fallbackNote} />
+                </p>
               )}
               <div className="mt-3 flex flex-wrap gap-2">
                 {["Explain my month in simple words", "What should I cut first?"].map((q) => (

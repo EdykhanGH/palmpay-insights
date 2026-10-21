@@ -34,7 +34,7 @@ ${JSON.stringify(facts ?? {})}
 Rules:
 - For any number not in the overview, use the tools. Never guess or do arithmetic yourself; use what_if for savings maths.
 - When explaining a spike or an insight, look up the actual transactions behind it (list_transactions) and name the biggest ones.
-- "Spending" means direction "out". Answer in 2-5 short sentences, amounts like ₦12,500. Give one practical next step, mentioning a PalmPay feature (CashBox, QR pay, spending limits, bill payments, account freeze) when it genuinely fits.
+- "Spending" means direction "out". Answer in 2-5 short sentences of plain text (no markdown, headings or bullet symbols; use **bold** at most once for the key number), amounts like ₦12,500. Give one practical next step, mentioning a PalmPay feature (CashBox, QR pay, spending limits, bill payments, account freeze) when it genuinely fits.
 - End with a final line exactly in this form: FOLLOWUPS: question one | question two | question three
   (three short follow-up questions the user might tap next, written in the user's voice).
 ${language === "pidgin" ? "Reply in friendly Nigerian Pidgin English (follow-ups too)." : "Reply in simple, plain English."}`,

@@ -4,6 +4,7 @@ import type { Facts } from "../lib/analyse";
 import { naira, prettyDate } from "../lib/format";
 import { localAnswer, type LocalReply } from "../lib/localAnswer";
 import type { Insight, Txn } from "../lib/types";
+import { RichText } from "./ui";
 
 interface Msg extends LocalReply {
   role: "user" | "assistant";
@@ -110,7 +111,9 @@ export default function Ask({ txns, name, language, facts, sheet, insights, over
             <div className="mb-1 flex items-center gap-1.5 text-xs font-bold text-pp">
               <Sparkles size={14} /> Pally
             </div>
-            <div className="whitespace-pre-line">{overview}</div>
+            <div className="whitespace-pre-line">
+              <RichText text={overview} />
+            </div>
             {insights.length > 0 && (
               <div className="mt-3 space-y-2">
                 <div className="text-xs font-semibold text-muted">I noticed {insights.length} things. Tap one to ask about it:</div>
@@ -136,7 +139,9 @@ export default function Ask({ txns, name, language, facts, sheet, insights, over
                 m.role === "user" ? "rounded-br-sm bg-pp text-white" : "rounded-bl-sm bg-white shadow-card"
               }`}
             >
-              <div className="whitespace-pre-wrap">{m.text}</div>
+              <div className="whitespace-pre-wrap">
+                <RichText text={m.text} />
+              </div>
               {m.evidence && m.evidence.length > 0 && (
                 <div className="mt-2 rounded-xl bg-pp-soft/60 p-2">
                   <div className="mb-1 flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-pp">

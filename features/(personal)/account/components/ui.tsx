@@ -54,6 +54,17 @@ export function InsightCard({ insight, onAction, onAsk }: { insight: Insight; on
   );
 }
 
+/** Shows **bold** from AI replies as bold text instead of raw asterisks. */
+export function RichText({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+        /^\*\*[^*]+\*\*$/.test(part) ? <b key={i}>{part.slice(2, -2)}</b> : part,
+      )}
+    </>
+  );
+}
+
 export function ScoreRing({ score, onLight = false }: { score: number; onLight?: boolean }) {
   const r = 30;
   const c = 2 * Math.PI * r;
