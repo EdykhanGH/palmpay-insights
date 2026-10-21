@@ -1,6 +1,6 @@
 import type { Txn } from "./types";
 
-// Tools Claude calls while answering "Ask PalmPay" questions. All maths happens here, on the user's own rows.
+// Tools Claude calls while answering questions as Pally. All maths happens here, on the user's own rows.
 
 export const CATEGORIES = [
   "Income", "Transfers received", "Interest", "From Savings", "Loan received", "Transfers to people", "Transfers to self", "Church & Giving", "Food & Groceries", "Transport", "Airtime & Data", "Bills & Utilities", "Subscriptions",

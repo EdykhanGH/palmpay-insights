@@ -119,7 +119,7 @@ function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void
           onOpenInsights={() => setTab("ask")}
           onAsk={askAbout}
           onSeeAll={() => setTab("history")}
-          onDemo={(label) => showToast(`${label} isn't part of this demo. Try PalmPay Insights ✨`)}
+          onDemo={(label) => showToast(`${label} isn't part of this demo. Try asking Pally ✨`)}
         />
       )}
 
@@ -175,7 +175,7 @@ function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void
           <main className="px-4">
             <div className="card mt-4 border border-pp/10 p-4">
               <div className="flex items-center gap-2 text-sm font-bold text-pp">
-                <Sparkles size={16} /> Your money coach
+                <Sparkles size={16} /> Pally’s take
               </div>
               {noteLoading ? (
                 <div className="mt-2 space-y-2">
@@ -193,7 +193,7 @@ function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void
                   </button>
                 ))}
                 <button onClick={() => setTab("ask")} className="chip bg-pp text-xs text-white">
-                  Chat with your coach →
+                  Chat with Pally →
                 </button>
               </div>
             </div>
@@ -247,8 +247,8 @@ function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void
               <Sparkles size={18} />
             </div>
             <div>
-              <div className="font-extrabold leading-tight">PalmPay Insights</div>
-              <div className="text-[11px] opacity-85">Your AI money assistant</div>
+              <div className="font-extrabold leading-tight">Pally</div>
+              <div className="text-[11px] opacity-85">Your PalmPay money assistant</div>
             </div>
           </div>
           <div className="flex gap-2">
@@ -316,7 +316,7 @@ function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void
           </div>
           <div className="card mx-4 mt-4 divide-y divide-pp-soft">
             <button onClick={() => setTab("ask")} className="flex w-full items-center gap-3 p-4 text-left font-semibold">
-              <Sparkles className="text-pp" size={20} /> <span className="flex-1">PalmPay Insights</span> <ChevronRight size={18} className="text-muted" />
+              <Sparkles className="text-pp" size={20} /> <span className="flex-1">Chat with Pally</span> <ChevronRight size={18} className="text-muted" />
             </button>
             <button onClick={() => setLanguage(language === "english" ? "pidgin" : "english")} className="flex w-full items-center gap-3 p-4 text-left font-semibold">
               <Languages className="text-pp" size={20} /> <span className="flex-1">Insights language</span>
@@ -357,7 +357,7 @@ function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void
           [
             ["home", "Home", HomeIcon],
             ["history", "History", List],
-            ["ask", "Insights", Sparkles],
+            ["ask", "Pally", Sparkles],
             ["insights", "Dashboard", LayoutDashboard],
             ["me", "Me", User],
           ] as const

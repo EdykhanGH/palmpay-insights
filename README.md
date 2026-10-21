@@ -1,6 +1,6 @@
 # PalmPay Insights
 
-**An AI money coach inside PalmPay.** It reads your transaction history and tells you what's happening, what's unusual, and what to do next, in plain English or Pidgin.
+**Pally, an AI money assistant inside PalmPay.** It reads your transaction history and tells you what's happening, what's unusual, and what to do next, in plain English or Pidgin.
 
 ## What it does
 
@@ -10,8 +10,8 @@
 | **Fraud / unusual activity** | "Unusual: ₦80,000 to a new account at 2:01am. Wasn't you? Freeze your account" |
 | **Run-out forecast** | "At this pace you'll run out around 21 Oct, 5 days before payday" |
 | **Money health score** | 0–100, built from spending vs income, savings, betting, fees and cash cushion |
-| **AI money coach** | A short, personal note with 3 actions, written by Claude from your numbers |
-| **Ask PalmPay** | Chat: "How much did I spend on betting since August?" Claude calls tools that do the maths in code, so answers are exact |
+| **Pally’s take** | A short, personal note with 3 actions, written by Claude from your numbers |
+| **Chat with Pally** | Chat: "How much did I spend on betting since August?" Claude calls tools that do the maths in code, so answers are exact |
 | **Statement upload** | Drop in a PalmPay / bank statement (Excel or CSV) and get insights on real data |
 | **Category & trend charts** | This month vs your usual by the same day; month-by-month in vs out |
 

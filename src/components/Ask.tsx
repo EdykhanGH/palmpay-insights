@@ -108,7 +108,7 @@ export default function Ask({ txns, name, language, facts, sheet, insights, over
         <div className="flex justify-start">
           <div className="max-w-[92%] rounded-2xl rounded-bl-sm bg-white px-4 py-3 text-sm leading-relaxed shadow-card">
             <div className="mb-1 flex items-center gap-1.5 text-xs font-bold text-pp">
-              <Sparkles size={14} /> PalmPay AI
+              <Sparkles size={14} /> Pally
             </div>
             <div className="whitespace-pre-line">{overview}</div>
             {insights.length > 0 && (
@@ -125,7 +125,7 @@ export default function Ask({ txns, name, language, facts, sheet, insights, over
                 ))}
               </div>
             )}
-            <div className="mt-3 text-xs text-muted">Ask me anything about your transactions. I'll show you the payments behind every answer.</div>
+            <div className="mt-3 text-xs text-muted">Ask me anything about your transactions and I’ll show you the payments behind every answer.</div>
           </div>
         </div>
 
@@ -161,7 +161,7 @@ export default function Ask({ txns, name, language, facts, sheet, insights, over
         ))}
         {(busy || busyUpload) && (
           <div className="w-40 animate-pulse rounded-2xl bg-white px-4 py-2.5 text-sm text-muted shadow-card">
-            {busyUpload ? "Reading statement…" : "Looking…"}
+            {busyUpload ? "Pally is reading your statement…" : "Pally is looking…"}
           </div>
         )}
 
@@ -195,7 +195,7 @@ export default function Ask({ txns, name, language, facts, sheet, insights, over
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask about your money…"
+          placeholder="Ask Pally about your money…"
           className="min-w-0 flex-1 rounded-full border border-pp/20 bg-white px-4 py-3 text-sm shadow-card outline-none focus:border-pp"
         />
         <button disabled={busy} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-pp text-white disabled:opacity-50" aria-label="Send">

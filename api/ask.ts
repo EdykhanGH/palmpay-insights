@@ -4,7 +4,7 @@ import { client, MODEL, textOf, type Req, type Res } from "./_claude.js";
 
 const MAX_ROUNDS = 6;
 
-// "Ask PalmPay": Claude answers questions about the user's transactions by calling tools that do exact maths.
+// Pally: Claude answers questions about the user's transactions by calling tools that do exact maths.
 // Returns the answer, the transactions it looked at (as receipts) and follow-up questions.
 export default async function handler(req: Req, res: Res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
@@ -26,7 +26,7 @@ export default async function handler(req: Req, res: Res) {
       const response = await client().messages.create({
         model: MODEL,
         max_tokens: 2000,
-        system: `You are "Ask PalmPay", a friendly money assistant inside the PalmPay app in Nigeria, talking to ${name ?? "the user"}.
+        system: `You are Pally, a friendly money assistant inside the PalmPay app in Nigeria, talking to ${name ?? "the user"}.
 Your job is to help them understand what is going on with their money and what to do about it.
 Today is ${today}. Their history runs from ${rows[0]?.date.slice(0, 10) ?? "?"} to ${today}.
 Here is their monthly overview, already computed exactly (use it for context, quote it freely):

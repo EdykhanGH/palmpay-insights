@@ -90,11 +90,11 @@ export default function Home({ firstName, facts, insights, txns, onOpenInsights,
         ))}
       </div>
 
-      {/* PalmPay Insights: the feature */}
+      {/* PalmPay Insights with Pally: the feature */}
       <div className="mx-4 mt-4 overflow-hidden rounded-3xl border-2 border-pp/20 bg-white shadow-card">
         <div className="flex items-center justify-between bg-pp-soft px-4 py-2">
           <div className="flex items-center gap-1.5 text-sm font-extrabold text-pp">
-            <Sparkles size={16} /> PalmPay Insights
+            <Sparkles size={16} /> Ask Pally · PalmPay Insights
           </div>
           <span className="rounded-full bg-pp px-2 py-0.5 text-[10px] font-bold text-white">NEW</span>
         </div>

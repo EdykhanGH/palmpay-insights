@@ -83,7 +83,7 @@ export function overviewText(f: Facts, name: string) {
   const month = new Date(f.month + "-01T12:00:00").toLocaleString("en-NG", { month: "long" });
   const top = f.byCategory.filter((c) => !NOT_SPEND.has(c.category)).slice(0, 3);
   return (
-    `Hi ${name}! Here's ${month} so far: ${naira(f.thisMonth.income)} came in and ${naira(f.thisMonth.spend)} went out.` +
+    `Hi ${name}, I’m Pally! Here’s ${month} so far: ${naira(f.thisMonth.income)} came in and ${naira(f.thisMonth.spend)} went out.` +
     (top.length ? ` Most of it went on ${top.map((c) => `${c.category} (${naira(c.amount)})`).join(", ")}.` : "") +
     ` Your money health score is ${f.score}/100.`
   );
