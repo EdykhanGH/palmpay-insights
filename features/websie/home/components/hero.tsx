@@ -61,14 +61,14 @@ export default function Hero() {
           </div>
         </div>
 
-        <div className="animate-rise-delay-2 relative mx-auto w-full max-w-88 md:max-w-none md:justify-self-end">
-          <div className="animate-float-soft relative mx-auto aspect-688/1024 w-full max-w-104 md:max-w-md">
+        <div className="animate-rise-delay-2 relative mx-auto w-full max-w-md md:justify-self-end">
+          <div className="animate-float-soft relative mx-auto aspect-square w-full overflow-hidden md:max-w-md">
             <Image
               src="/images/hero-visual.png"
               alt="PalmPay app on a phone with a happy customer"
               fill
               priority
-              className="object-contain object-bottom drop-shadow-[0_24px_48px_rgba(0,0,0,0.28)]"
+              className="object-cover object-center drop-shadow-[0_24px_48px_rgba(0,0,0,0.28)]"
               sizes="(max-width: 768px) 90vw, 448px"
             />
           </div>
