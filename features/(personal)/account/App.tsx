@@ -5,15 +5,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Ask, { type PendingQuestion } from "./components/Ask";
 import { CategoryBars, MonthlyBars } from "./components/Charts";
 import { InsightCard, RichText, ScoreRing, Section } from "./components/ui";
-import { accountFor, maskPhone } from "./lib/accounts";
+import { accountById, maskPhone } from "./lib/accounts";
 import { buildInsights, computeFacts, factSheet, perMonth } from "./lib/analyse";
 import { monthName, naira, prettyDate } from "./lib/format";
 import { overviewText } from "./lib/localAnswer";
 import { openingBalance, seedTransactions } from "./lib/seed";
 import { readStatement } from "./lib/statement";
+import type { Account } from "./lib/accounts";
 import type { Insight, Txn } from "./lib/types";
 import Home from "./screens/Home";
 import Login from "./screens/Login";
+import SignUp from "./screens/SignUp";
 
 // "ask" is the Insights chat (the main feature); "insights" is the dashboard of cards and charts behind it.
 type Tab = "home" | "insights" | "ask" | "history" | "me";
@@ -21,12 +23,26 @@ type Tab = "home" | "insights" | "ask" | "history" | "me";
 export default function App() {
   // Session lives in memory only, so every visit or refresh starts at the login screen.
   const [user, setUser] = useState<string | null>(null);
-  if (!user) return <Login onLogin={setUser} />;
-  return <Main key={user} personaId={user} onLogout={() => setUser(null)} />;
+  const [signingUp, setSigningUp] = useState(false);
+  const account = user ? accountById(user) : undefined;
+  if (!account) {
+    if (signingUp)
+      return (
+        <SignUp
+          onBack={() => setSigningUp(false)}
+          onCreated={(id) => {
+            setSigningUp(false);
+            setUser(id);
+          }}
+        />
+      );
+    return <Login onLogin={setUser} onSignUp={() => setSigningUp(true)} />;
+  }
+  return <Main key={account.id} account={account} onLogout={() => setUser(null)} />;
 }
 
-function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void }) {
-  const account = accountFor(personaId)!;
+function Main({ account, onLogout }: { account: Account; onLogout: () => void }) {
+  const personaId = account.personaId;
   const firstName = account.fullName.split(" ")[0];
   const [uploaded, setUploaded] = useState<{ name: string; txns: Txn[] } | null>(null);
   const [useUpload, setUseUpload] = useState(false);
@@ -41,9 +57,11 @@ function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void
   const fileRef = useRef<HTMLInputElement>(null);
 
   const fromUpload = useUpload && !!uploaded;
-  const txns = useMemo(() => (fromUpload ? uploaded!.txns : seedTransactions(personaId)), [fromUpload, uploaded, personaId]);
+  // The account's own history; accounts created on this device each get their own variation of their profile.
+  const accountTxns = useMemo(() => seedTransactions(personaId, new Date(), account.id), [personaId, account.id]);
+  const txns = useMemo(() => (fromUpload ? uploaded!.txns : accountTxns), [fromUpload, uploaded, accountTxns]);
   const facts = useMemo(() => computeFacts(txns, fromUpload ? undefined : openingBalance(personaId)), [txns, fromUpload, personaId]);
-  const accountFacts = useMemo(() => computeFacts(seedTransactions(personaId), openingBalance(personaId)), [personaId]);
+  const accountFacts = useMemo(() => computeFacts(accountTxns, openingBalance(personaId)), [accountTxns, personaId]);
   const insights = useMemo(() => buildInsights(facts), [facts]);
   const sheet = useMemo(() => factSheet(facts, insights), [facts, insights]);
 
@@ -120,7 +138,7 @@ function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void
           firstName={firstName}
           facts={{ ...facts, balance: accountFacts.balance }}
           insights={insights}
-          txns={seedTransactions(personaId)}
+          txns={accountTxns}
           onOpenInsights={() => setTab("ask")}
           onAsk={askAbout}
           onSeeAll={() => setTab("history")}

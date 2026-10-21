@@ -28,8 +28,14 @@ function rng(seed: number) {
 
 const DAYS = 120;
 
-export function seedTransactions(personaId: string, today = new Date()): Txn[] {
-  const r = rng(personaId.split("").reduce((a, c) => a + c.charCodeAt(0), 0) * 7919);
+/** `seedKey` varies the history for accounts that share a profile (e.g. accounts created on this device). */
+export function seedTransactions(personaId: string, today = new Date(), seedKey = personaId): Txn[] {
+  // Built-in accounts keep their original seed so their demo history never changes.
+  const seed =
+    seedKey === personaId
+      ? personaId.split("").reduce((a, c) => a + c.charCodeAt(0), 0) * 7919
+      : seedKey.split("").reduce((a, c, i) => a + c.charCodeAt(0) * (i + 1), 0) * 7919;
+  const r = rng(seed);
   const pick = <T,>(xs: T[]) => xs[Math.floor(r() * xs.length)];
   const between = (lo: number, hi: number, step = 50) => Math.round((lo + r() * (hi - lo)) / step) * step;
   const end = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 0, 0);

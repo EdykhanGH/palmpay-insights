@@ -1,17 +1,16 @@
 import { ChevronRight, Delete, Fingerprint } from "lucide-react";
 import { useState } from "react";
-import { ACCOUNTS, DEMO_PIN, maskPhone } from "../lib/accounts";
+import { ACCOUNTS, findByPhone, maskPhone, pinFor } from "../lib/accounts";
 
-// The account shown as a saved login on this device.
-const SAVED = ACCOUNTS[0];
-
-export default function Login({ onLogin }: { onLogin: (personaId: string) => void }) {
+export default function Login({ onLogin, onSignUp }: { onLogin: (accountId: string) => void; onSignUp: () => void }) {
   const [phone, setPhone] = useState("");
   const [pin, setPin] = useState("");
   const [step, setStep] = useState<"phone" | "pin">("phone");
   const [error, setError] = useState<string | null>(null);
 
-  const account = ACCOUNTS.find((a) => a.phone === phone);
+  const account = findByPhone(phone);
+  // The account shown as a saved login on this device.
+  const saved = [ACCOUNTS[0]];
 
   function next() {
     if (!/^0\d{10}$/.test(phone)) return setError("Enter your 11-digit phone number, e.g. 08012345678");
@@ -26,7 +25,7 @@ export default function Login({ onLogin }: { onLogin: (personaId: string) => voi
     const p = (pin + d).slice(0, 6);
     setPin(p);
     if (p.length === 6) {
-      if (p === DEMO_PIN && account) setTimeout(() => onLogin(account.personaId), 150);
+      if (account && p === pinFor(account)) setTimeout(() => onLogin(account.id), 150);
       else setTimeout(() => {
         setPin("");
         setError("Wrong PIN. Please try again.");
@@ -65,20 +64,32 @@ export default function Login({ onLogin }: { onLogin: (personaId: string) => voi
               Continue
             </button>
 
+            <div className="mt-8 space-y-3">
+              {saved.map((a) => (
+                <button
+                  key={a.id}
+                  onClick={() => {
+                    setPhone(a.phone);
+                    setError(null);
+                    setStep("pin");
+                  }}
+                  className="flex w-full items-center gap-3 rounded-2xl bg-white p-3 text-left shadow-card"
+                >
+                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-pp text-lg font-extrabold text-white">{a.fullName[0]}</span>
+                  <span className="flex-1">
+                    <span className="block font-bold">{a.fullName}</span>
+                    <span className="block text-sm text-muted">{maskPhone(a.phone)}</span>
+                  </span>
+                  <ChevronRight className="text-pp" />
+                </button>
+              ))}
+            </div>
+
             <button
-              onClick={() => {
-                setPhone(SAVED.phone);
-                setError(null);
-                setStep("pin");
-              }}
-              className="mt-8 flex w-full items-center gap-3 rounded-2xl bg-white p-3 text-left shadow-card"
+              onClick={onSignUp}
+              className="mt-4 w-full rounded-full border-2 border-pp py-3 font-bold text-pp hover:bg-pp-soft"
             >
-              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-pp text-lg font-extrabold text-white">{SAVED.fullName[0]}</span>
-              <span className="flex-1">
-                <span className="block font-bold">{SAVED.fullName}</span>
-                <span className="block text-sm text-muted">{maskPhone(SAVED.phone)}</span>
-              </span>
-              <ChevronRight className="text-pp" />
+              Create new account
             </button>
           </>
         ) : (
