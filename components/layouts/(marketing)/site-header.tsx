@@ -14,7 +14,7 @@ const links = [
 ];
 
 const loginOptions = [
-  { label: "Personal Account", href: "/personal" },
+  { label: "Personal Account", href: "/account" },
   { label: "Business Account", href: "/home" },
 ];
 
