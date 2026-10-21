@@ -54,18 +54,18 @@ export function InsightCard({ insight, onAction, onAsk }: { insight: Insight; on
   );
 }
 
-export function ScoreRing({ score }: { score: number }) {
+export function ScoreRing({ score, onLight = false }: { score: number; onLight?: boolean }) {
   const r = 30;
   const c = 2 * Math.PI * r;
   const color = score >= 70 ? "#16A34A" : score >= 45 ? "#F59E0B" : "#F87171";
   return (
     <svg width="76" height="76" viewBox="0 0 76 76" role="img" aria-label={`Money health score ${score} out of 100`}>
-      <circle cx="38" cy="38" r={r} stroke="rgba(255,255,255,.25)" strokeWidth="7" fill="none" />
+      <circle cx="38" cy="38" r={r} stroke={onLight ? "#F1EAFD" : "rgba(255,255,255,.25)"} strokeWidth="7" fill="none" />
       <circle
         cx="38" cy="38" r={r} stroke={color} strokeWidth="7" fill="none" strokeLinecap="round"
         strokeDasharray={c} strokeDashoffset={c * (1 - score / 100)} transform="rotate(-90 38 38)"
       />
-      <text x="38" y="43" textAnchor="middle" fontSize="20" fontWeight="800" fill="white">{score}</text>
+      <text x="38" y="43" textAnchor="middle" fontSize="20" fontWeight="800" fill={onLight ? "#1E1530" : "white"}>{score}</text>
     </svg>
   );
 }

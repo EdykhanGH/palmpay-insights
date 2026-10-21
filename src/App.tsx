@@ -1,20 +1,51 @@
-import { BarChart3, List, MessageCircle, Sparkles, Upload } from "lucide-react";
+import { ArrowLeft, ChevronRight, Home as HomeIcon, Languages, LogOut, MessageCircle, Shield, Sparkles, Upload, User } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Ask, { type PendingQuestion } from "./components/Ask";
 import { CategoryBars, MonthlyBars } from "./components/Charts";
 import { InsightCard, ScoreRing, Section } from "./components/ui";
+import { accountFor, maskPhone, saveSession, savedSession } from "./lib/accounts";
 import { buildInsights, computeFacts, factSheet, perMonth } from "./lib/analyse";
 import { monthName, naira, prettyDate } from "./lib/format";
-import { openingBalance, PERSONAS, seedTransactions } from "./lib/seed";
+import { openingBalance, seedTransactions } from "./lib/seed";
 import { readStatement } from "./lib/statement";
 import type { Insight, Txn } from "./lib/types";
+import Home from "./screens/Home";
+import Login from "./screens/Login";
 
-type Tab = "insights" | "ask" | "history";
+type Tab = "home" | "insights" | "ask" | "history" | "me";
 
 export default function App() {
-  const [source, setSource] = useState<string>("tunde");
+  const [user, setUser] = useState<string | null>(() => {
+    const s = savedSession();
+    return s && accountFor(s) ? s : null;
+  });
+  if (!user)
+    return (
+      <Login
+        onLogin={(id) => {
+          saveSession(id);
+          setUser(id);
+        }}
+      />
+    );
+  return (
+    <Main
+      key={user}
+      personaId={user}
+      onLogout={() => {
+        saveSession(null);
+        setUser(null);
+      }}
+    />
+  );
+}
+
+function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void }) {
+  const account = accountFor(personaId)!;
+  const firstName = account.fullName.split(" ")[0];
   const [uploaded, setUploaded] = useState<{ name: string; txns: Txn[] } | null>(null);
-  const [tab, setTab] = useState<Tab>("insights");
+  const [useUpload, setUseUpload] = useState(false);
+  const [tab, setTab] = useState<Tab>("home");
   const [language, setLanguage] = useState<"english" | "pidgin">("english");
   const [note, setNote] = useState<string | null>(null);
   const [noteLoading, setNoteLoading] = useState(false);
@@ -23,14 +54,11 @@ export default function App() {
   const [pending, setPending] = useState<PendingQuestion | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const persona = PERSONAS.find((p) => p.id === source);
-  const name = source === "upload" ? "there" : persona?.name ?? "there";
-  const txns = useMemo(
-    () => (source === "upload" && uploaded ? uploaded.txns : seedTransactions(source)),
-    [source, uploaded],
-  );
-  const facts = useMemo(() => computeFacts(txns, source === "upload" ? 0 : openingBalance(source)), [txns, source]);
+  const fromUpload = useUpload && !!uploaded;
+  const txns = useMemo(() => (fromUpload ? uploaded!.txns : seedTransactions(personaId)), [fromUpload, uploaded, personaId]);
+  const facts = useMemo(() => computeFacts(txns, fromUpload ? 0 : openingBalance(personaId)), [txns, fromUpload, personaId]);
   const insights = useMemo(() => buildInsights(facts), [facts]);
+  const sheet = useMemo(() => factSheet(facts, insights), [facts, insights]);
 
   // AI coach note, written from the exact fact sheet.
   useEffect(() => {
@@ -40,7 +68,7 @@ export default function App() {
     fetch("/api/insights", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ facts: factSheet(facts, insights), name, language }),
+      body: JSON.stringify({ facts: sheet, name: firstName, language }),
     })
       .then((r) => r.json())
       .then((j) => !cancelled && setNote(j.note ?? null))
@@ -49,7 +77,9 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [facts, insights, name, language]);
+  }, [sheet, firstName, language]);
+
+  useEffect(() => window.scrollTo(0, 0), [tab]);
 
   async function onFile(f: File | undefined) {
     if (!f) return;
@@ -57,7 +87,7 @@ export default function App() {
     try {
       const t = await readStatement(f);
       setUploaded({ name: f.name, txns: t });
-      setSource("upload");
+      setUseUpload(true);
       setTab("insights");
     } catch (e) {
       setUploadError((e as Error).message);
@@ -69,89 +99,91 @@ export default function App() {
     setTab("ask");
   }
 
-  function onAction(i: Insight) {
-    setToast(`"${i.action}": this would open in the PalmPay app.`);
+  function showToast(text: string) {
+    setToast(text);
     setTimeout(() => setToast(null), 2500);
   }
+
+  const onAction = (i: Insight) => showToast(`"${i.action}" would open here in the PalmPay app.`);
 
   const fallbackNote = insights
     .slice(0, 3)
     .map((i) => `• ${i.title}${i.action ? `. ${i.action}.` : "."}`)
     .join("\n");
 
+  const subHeader = (title: string, back: Tab = "home") => (
+    <div className="sticky top-0 z-10 flex items-center gap-3 bg-[#f6f3fb]/95 px-4 py-4 backdrop-blur">
+      <button onClick={() => setTab(back)} className="rounded-full bg-white p-2 shadow-card" aria-label="Back">
+        <ArrowLeft size={18} />
+      </button>
+      <h1 className="text-lg font-extrabold">{title}</h1>
+    </div>
+  );
+
   return (
     <div className="mx-auto min-h-screen max-w-md pb-28">
-      {/* Header */}
-      <header className="rounded-b-[28px] bg-gradient-to-br from-pp to-pp-dark px-4 pb-6 pt-5 text-white">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/15 font-black">P</div>
-            <div>
-              <div className="text-xs opacity-80">PalmPay</div>
-              <div className="-mt-0.5 font-extrabold">Insights</div>
+      {tab === "home" && (
+        <Home
+          firstName={firstName}
+          facts={facts}
+          insights={insights}
+          txns={txns}
+          onOpenInsights={() => setTab("insights")}
+          onAsk={askAbout}
+          onSeeAll={() => setTab("history")}
+          onDemo={(label) => showToast(`${label} isn't part of this demo. Try PalmPay Insights ✨`)}
+        />
+      )}
+
+      {tab === "insights" && (
+        <>
+          <header className="rounded-b-[28px] bg-gradient-to-br from-pp to-pp-dark px-4 pb-6 pt-4 text-white">
+            <div className="flex items-center justify-between">
+              <button onClick={() => setTab("home")} className="rounded-full bg-white/15 p-2" aria-label="Back">
+                <ArrowLeft size={18} />
+              </button>
+              <div className="flex items-center gap-1.5 font-extrabold">
+                <Sparkles size={18} /> PalmPay Insights
+              </div>
+              <button onClick={() => setLanguage(language === "english" ? "pidgin" : "english")} className="chip bg-white/15 text-xs text-white">
+                {language === "english" ? "English" : "Pidgin"} ⇄
+              </button>
             </div>
-          </div>
-          <button
-            onClick={() => setLanguage(language === "english" ? "pidgin" : "english")}
-            className="chip bg-white/15 text-xs text-white"
-          >
-            {language === "english" ? "English" : "Pidgin"} ⇄
-          </button>
-        </div>
 
-        <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
-          {PERSONAS.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => setSource(p.id)}
-              className={`chip whitespace-nowrap ${source === p.id ? "bg-white text-pp" : "bg-white/15 text-white"}`}
-            >
-              {p.name} · {p.tagline.split(",")[0]}
-            </button>
-          ))}
-          {uploaded && (
-            <button
-              onClick={() => setSource("upload")}
-              className={`chip whitespace-nowrap ${source === "upload" ? "bg-white text-pp" : "bg-white/15 text-white"}`}
-            >
-              My statement
-            </button>
-          )}
-          <button onClick={() => fileRef.current?.click()} className="chip flex items-center gap-1 whitespace-nowrap bg-white/15 text-white">
-            <Upload size={14} /> Upload statement
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            className="hidden"
-            onChange={(e) => {
-              onFile(e.target.files?.[0]);
-              e.target.value = "";
-            }}
-          />
-        </div>
-        {uploadError && <div className="mt-2 rounded-lg bg-white/15 p-2 text-sm">{uploadError}</div>}
-
-        <div className="mt-5 flex items-center justify-between">
-          <div>
-            <div className="text-sm opacity-80">Hi {name} 👋 Balance</div>
-            <div className="text-3xl font-extrabold">{naira(facts.balance)}</div>
-            <div className="mt-1 text-xs opacity-80">
-              {monthName(facts.month)} so far: in {naira(facts.thisMonth.income)} · out {naira(facts.thisMonth.spend)}
+            <div className="mt-5 flex items-center justify-between">
+              <div>
+                <div className="text-sm opacity-80">{monthName(facts.month)} so far</div>
+                <div className="mt-1 text-sm">
+                  In <span className="font-extrabold">{naira(facts.thisMonth.income)}</span>
+                </div>
+                <div className="text-sm">
+                  Out <span className="font-extrabold">{naira(facts.thisMonth.spend)}</span>
+                </div>
+                <div className="text-sm">
+                  Balance <span className="font-extrabold">{naira(facts.balance)}</span>
+                </div>
+              </div>
+              <div className="text-center">
+                <ScoreRing score={facts.score} />
+                <div className="text-[11px] font-semibold opacity-90">Money health</div>
+              </div>
             </div>
-          </div>
-          <div className="text-center">
-            <ScoreRing score={facts.score} />
-            <div className="text-[11px] font-semibold opacity-90">Money health</div>
-          </div>
-        </div>
-      </header>
 
-      <main className="px-4">
-        {tab === "insights" && (
-          <>
-            <div className="card -mt-0 mt-4 border border-pp/10 p-4">
+            <div className="mt-4 flex gap-2 overflow-x-auto">
+              {uploaded && (
+                <button onClick={() => setUseUpload(!useUpload)} className="chip whitespace-nowrap bg-white text-xs text-pp">
+                  {useUpload ? "Showing: my statement ⇄ PalmPay history" : "Showing: PalmPay history ⇄ my statement"}
+                </button>
+              )}
+              <button onClick={() => fileRef.current?.click()} className="chip flex items-center gap-1 whitespace-nowrap bg-white/15 text-xs text-white">
+                <Upload size={14} /> Analyse a bank statement
+              </button>
+            </div>
+            {uploadError && <div className="mt-2 rounded-lg bg-white/15 p-2 text-sm">{uploadError}</div>}
+          </header>
+
+          <main className="px-4">
+            <div className="card mt-4 border border-pp/10 p-4">
               <div className="flex items-center gap-2 text-sm font-bold text-pp">
                 <Sparkles size={16} /> Your money coach
               </div>
@@ -213,69 +245,117 @@ export default function App() {
                 </div>
               </Section>
             )}
-          </>
-        )}
+          </main>
+        </>
+      )}
 
-        {/* Kept mounted so the conversation survives switching tabs. */}
-        <div className={tab === "ask" ? "mt-4" : "hidden"}>
-          <Ask
-            txns={txns}
-            name={name}
-            language={language}
-            facts={factSheet(facts, insights)}
-            overview={note ?? fallbackNote}
-            pending={pending}
-          />
+      {/* Kept mounted so the conversation survives switching tabs. */}
+      <div className={tab === "ask" ? "" : "hidden"}>
+        {subHeader("Ask PalmPay ✨")}
+        <div className="px-4">
+          <Ask txns={txns} name={firstName} language={language} facts={sheet} overview={note ?? fallbackNote} pending={pending} />
         </div>
+      </div>
 
-        {tab === "history" && (
-          <Section title={`${txns.length} transactions`}>
-            <div className="card divide-y divide-pp-soft">
-              {[...txns]
-                .reverse()
-                .slice(0, 150)
-                .map((x) => (
-                  <div key={x.id} className="flex items-center justify-between gap-3 p-3 text-sm">
-                    <div className="min-w-0">
-                      <div className="truncate font-semibold">{x.description}</div>
-                      <div className="text-xs text-muted">
-                        {prettyDate(x.date)} · <span className="font-semibold text-pp">{x.category}</span>
-                      </div>
-                    </div>
-                    <div className={`shrink-0 font-bold ${x.direction === "in" ? "text-ok" : ""}`}>
-                      {x.direction === "in" ? "+" : "−"}
-                      {naira(x.amount)}
+      {tab === "history" && (
+        <>
+          {subHeader("Transaction History")}
+          <div className="card mx-4 divide-y divide-pp-soft">
+            {[...txns]
+              .reverse()
+              .slice(0, 150)
+              .map((x) => (
+                <div key={x.id} className="flex items-center justify-between gap-3 p-3 text-sm">
+                  <div className="min-w-0">
+                    <div className="truncate font-semibold">{x.description}</div>
+                    <div className="text-xs text-muted">
+                      {prettyDate(x.date)} · <span className="font-semibold text-pp">{x.category}</span>
                     </div>
                   </div>
-                ))}
+                  <div className={`shrink-0 font-bold ${x.direction === "in" ? "text-ok" : ""}`}>
+                    {x.direction === "in" ? "+" : "−"}
+                    {naira(x.amount)}
+                  </div>
+                </div>
+              ))}
+          </div>
+        </>
+      )}
+
+      {tab === "me" && (
+        <>
+          <div className="rounded-b-[28px] bg-gradient-to-br from-pp to-pp-dark px-4 pb-8 pt-8 text-center text-white">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white text-3xl font-extrabold text-pp">{firstName[0]}</div>
+            <div className="mt-3 text-xl font-extrabold">{account.fullName}</div>
+            <div className="text-sm opacity-85">
+              {maskPhone(account.phone)} · {account.tier}
             </div>
-          </Section>
-        )}
-      </main>
+          </div>
+          <div className="card mx-4 mt-4 divide-y divide-pp-soft">
+            <button onClick={() => setTab("insights")} className="flex w-full items-center gap-3 p-4 text-left font-semibold">
+              <Sparkles className="text-pp" size={20} /> <span className="flex-1">PalmPay Insights</span> <ChevronRight size={18} className="text-muted" />
+            </button>
+            <button onClick={() => setLanguage(language === "english" ? "pidgin" : "english")} className="flex w-full items-center gap-3 p-4 text-left font-semibold">
+              <Languages className="text-pp" size={20} /> <span className="flex-1">Insights language</span>
+              <span className="text-sm text-muted">{language === "english" ? "English" : "Pidgin"}</span>
+            </button>
+            <button onClick={() => fileRef.current?.click()} className="flex w-full items-center gap-3 p-4 text-left font-semibold">
+              <Upload className="text-pp" size={20} /> <span className="flex-1">Analyse a bank statement</span> <ChevronRight size={18} className="text-muted" />
+            </button>
+            <button onClick={() => showToast("Security settings aren't part of this demo.")} className="flex w-full items-center gap-3 p-4 text-left font-semibold">
+              <Shield className="text-pp" size={20} /> <span className="flex-1">Security</span> <ChevronRight size={18} className="text-muted" />
+            </button>
+            <button onClick={onLogout} className="flex w-full items-center gap-3 p-4 text-left font-semibold text-bad">
+              <LogOut size={20} /> <span className="flex-1">Log out</span>
+            </button>
+          </div>
+        </>
+      )}
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".xlsx,.xls,.csv"
+        className="hidden"
+        onChange={(e) => {
+          onFile(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
 
       {toast && (
-        <div className="fixed bottom-24 left-1/2 z-20 w-[90%] max-w-sm -translate-x-1/2 rounded-xl bg-pp-ink px-4 py-3 text-center text-sm text-white shadow-card">
+        <div className="fixed bottom-24 left-1/2 z-30 w-[90%] max-w-sm -translate-x-1/2 rounded-xl bg-pp-ink px-4 py-3 text-center text-sm text-white shadow-card">
           {toast}
         </div>
       )}
 
-      <nav className="fixed bottom-0 left-1/2 z-10 flex w-full max-w-md -translate-x-1/2 justify-around border-t border-pp/10 bg-white py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      <nav className="fixed bottom-0 left-1/2 z-20 flex w-full max-w-md -translate-x-1/2 items-end justify-around border-t border-pp/10 bg-white pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1">
         {(
           [
-            ["insights", "Insights", BarChart3],
-            ["ask", "Chat", MessageCircle],
-            ["history", "Transactions", List],
+            ["home", "Home", HomeIcon],
+            ["insights", "Insights", Sparkles],
+            ["ask", "Ask", MessageCircle],
+            ["me", "Me", User],
           ] as const
-        ).map(([id, label, Icon]) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            className={`flex flex-col items-center px-4 py-1 text-xs font-semibold ${tab === id ? "text-pp" : "text-muted"}`}
-          >
-            <Icon size={22} />
-            {label}
-          </button>
-        ))}
+        ).map(([id, label, Icon]) =>
+          id === "insights" ? (
+            <button key={id} onClick={() => setTab(id)} className="-mt-5 flex flex-col items-center text-xs font-bold text-pp">
+              <span className={`flex h-14 w-14 items-center justify-center rounded-full border-4 border-white shadow-card ${tab === id ? "bg-pp-dark" : "bg-pp"} text-white`}>
+                <Icon size={24} />
+              </span>
+              {label}
+            </button>
+          ) : (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className={`flex flex-col items-center px-4 py-1.5 text-xs font-semibold ${tab === id || (id === "home" && tab === "history") ? "text-pp" : "text-muted"}`}
+            >
+              <Icon size={22} />
+              {label}
+            </button>
+          ),
+        )}
       </nav>
     </div>
   );
