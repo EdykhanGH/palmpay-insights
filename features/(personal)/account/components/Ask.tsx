@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Facts } from "../lib/analyse";
 import { naira, prettyDate } from "../lib/format";
 import { localAnswer, type LocalReply } from "../lib/localAnswer";
-import type { Insight, Txn } from "../lib/types";
+import type { Txn } from "../lib/types";
 import { RichText } from "./ui";
 
 interface Msg extends LocalReply {
@@ -23,12 +23,6 @@ const STARTERS = [
   "Tell me about my loans",
 ];
 
-const TONE: Record<Insight["severity"], string> = {
-  alert: "border-bad/30 bg-bad-soft text-bad",
-  warn: "border-warn/30 bg-warn-soft text-warn",
-  tip: "border-tip/30 bg-tip-soft text-tip",
-  good: "border-ok/30 bg-ok-soft text-ok",
-};
 
 interface Props {
   txns: Txn[];
@@ -36,8 +30,6 @@ interface Props {
   language: string;
   facts: Facts;
   sheet: unknown;
-  insights: Insight[];
-  overview: string;
   sourceLabel: string;
   pending: PendingQuestion | null;
   busyUpload: boolean;
@@ -45,7 +37,7 @@ interface Props {
   onDashboard: () => void;
 }
 
-export default function Ask({ txns, name, language, facts, sheet, insights, overview, sourceLabel, pending, busyUpload, onUpload, onDashboard }: Props) {
+export default function Ask({ txns, name, language, facts, sheet, sourceLabel, pending, busyUpload, onUpload, onDashboard }: Props) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -71,7 +63,7 @@ export default function Ask({ txns, name, language, facts, sheet, insights, over
 
   async function ask(q: string) {
     if (!q.trim() || busy) return;
-    const history = [{ role: "assistant" as const, text: overview }, ...msgs];
+    const history = msgs;
     setMsgs((m) => [...m, { role: "user", text: q }]);
     setInput("");
     setBusy(true);
@@ -170,30 +162,13 @@ export default function Ask({ txns, name, language, facts, sheet, insights, over
           </button>
         </div>
 
-        {/* The overview opens the conversation, with the top insights attached. */}
+        {/* Pally starts clean and only analyses when asked. */}
         <div className="flex justify-start">
           <div className="max-w-[92%] rounded-2xl rounded-bl-sm bg-white px-4 py-3 text-sm leading-relaxed shadow-card">
             <div className="mb-1 flex items-center gap-1.5 text-xs font-bold text-pp">
               <Sparkles size={14} /> Pally
             </div>
-            <div className="whitespace-pre-line">
-              <RichText text={overview} />
-            </div>
-            {insights.length > 0 && (
-              <div className="mt-3 space-y-2">
-                <div className="text-xs font-semibold text-muted">I noticed {insights.length} things. Tap one to ask about it:</div>
-                {insights.slice(0, 4).map((i) => (
-                  <button
-                    key={i.id}
-                    onClick={() => ask(`Tell me more about this: "${i.title}". Why is it happening and what should I do?`)}
-                    className={`block w-full rounded-xl border px-3 py-2 text-left text-xs font-semibold ${TONE[i.severity]}`}
-                  >
-                    {i.title} →
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="mt-3 text-xs text-muted">Ask me anything about your transactions and I’ll show you the payments behind every answer.</div>
+            Hi {name}, I’m Pally. Ask me anything about your money, by typing or with the mic.
           </div>
         </div>
 

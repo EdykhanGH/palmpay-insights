@@ -47,24 +47,27 @@ function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void
   const insights = useMemo(() => buildInsights(facts), [facts]);
   const sheet = useMemo(() => factSheet(facts, insights), [facts, insights]);
 
-  // AI coach note, written from the exact fact sheet.
+  // Pally's take is written only when the user asks for it; new data or language clears the old one.
   useEffect(() => {
-    let cancelled = false;
     setNote(null);
+  }, [sheet, language]);
+
+  async function getNote() {
     setNoteLoading(true);
-    fetch("/api/insights", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ facts: sheet, name: firstName, language }),
-    })
-      .then((r) => r.json())
-      .then((j) => !cancelled && setNote(j.note ?? null))
-      .catch(() => !cancelled && setNote(null))
-      .finally(() => !cancelled && setNoteLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [sheet, firstName, language]);
+    try {
+      const r = await fetch("/api/insights", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ facts: sheet, name: firstName, language }),
+      });
+      const j = await r.json();
+      setNote(j.note ?? fallbackNote);
+    } catch {
+      setNote(fallbackNote);
+    } finally {
+      setNoteLoading(false);
+    }
+  }
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -185,10 +188,14 @@ function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void
                   <div className="h-3 w-5/6 animate-pulse rounded bg-pp-soft" />
                   <div className="h-3 w-4/6 animate-pulse rounded bg-pp-soft" />
                 </div>
-              ) : (
+              ) : note ? (
                 <p className="mt-2 whitespace-pre-line text-sm leading-relaxed">
-                  <RichText text={note ?? fallbackNote} />
+                  <RichText text={note} />
                 </p>
+              ) : (
+                <button onClick={getNote} className="chip mt-2 bg-pp text-xs text-white">
+                  ✨ Get Pally’s take on this month
+                </button>
               )}
               <div className="mt-3 flex flex-wrap gap-2">
                 {["Explain my month in simple words", "What should I cut first?"].map((q) => (
@@ -273,8 +280,6 @@ function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void
             language={language}
             facts={facts}
             sheet={sheet}
-            insights={insights}
-            overview={note ?? fallbackNote}
             sourceLabel={fromUpload ? "your uploaded statement" : "your PalmPay account"}
             pending={pending}
             busyUpload={busyUpload}
