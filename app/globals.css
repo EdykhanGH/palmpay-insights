@@ -2,25 +2,88 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #1a0b2e;
+  --palm-purple: #6c2bd9;
+  --palm-purple-bright: #8000ff;
+  --palm-purple-deep: #2d0a5c;
+  --palm-lavender: #f5f2fc;
+  --palm-muted: #6b5a8a;
+  --palm-yellow: #f5c518;
+  --palm-ink: #1a1a1a;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-palm-purple: var(--palm-purple);
+  --color-palm-purple-bright: var(--palm-purple-bright);
+  --color-palm-purple-deep: var(--palm-purple-deep);
+  --color-palm-lavender: var(--palm-lavender);
+  --color-palm-muted: var(--palm-muted);
+  --color-palm-yellow: var(--palm-yellow);
+  --color-palm-ink: var(--palm-ink);
+  --font-sans: var(--font-manrope);
+  --font-display: var(--font-syne);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-manrope), system-ui, sans-serif;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float-soft {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-rise {
+  animation: rise 0.85s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-rise-delay-1 {
+  animation: rise 0.85s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both;
+}
+
+.animate-rise-delay-2 {
+  animation: rise 0.85s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
+}
+
+.animate-float-soft {
+  animation: float-soft 5.5s ease-in-out infinite;
+}
+
+.palm-offset {
+  box-shadow: 4px 4px 0 0 var(--palm-yellow);
+}
+
+.section-wash {
+  background-color: var(--palm-lavender);
+  background-image:
+    radial-gradient(ellipse 60% 50% at 0% 100%, rgba(108, 43, 217, 0.06), transparent 55%),
+    radial-gradient(ellipse 50% 40% at 100% 0%, rgba(122, 38, 255, 0.05), transparent 50%);
 }
