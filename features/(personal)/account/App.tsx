@@ -9,6 +9,7 @@ import { accountById, maskPhone } from "./lib/accounts";
 import { buildInsights, computeFacts, factSheet, perMonth } from "./lib/analyse";
 import { monthName, naira, prettyDate } from "./lib/format";
 import { overviewText } from "./lib/localAnswer";
+import { applyAction, limitProgress, loadPlan, savePlan, type PallyAction, type Plan } from "./lib/plan";
 import { openingBalance, seedTransactions } from "./lib/seed";
 import { readStatement } from "./lib/statement";
 import type { Account } from "./lib/accounts";
@@ -54,6 +55,8 @@ function Main({ account, onLogout }: { account: Account; onLogout: () => void })
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingQuestion | null>(null);
   const [busyUpload, setBusyUpload] = useState(false);
+  // Limits, goals and reminders the user confirmed with Pally (saved per account on this device).
+  const [plan, setPlan] = useState<Plan>(() => loadPlan(account.id));
   const fileRef = useRef<HTMLInputElement>(null);
 
   const fromUpload = useUpload && !!uploaded;
@@ -111,6 +114,23 @@ function Main({ account, onLogout }: { account: Account; onLogout: () => void })
   function askAbout(text: string) {
     setPending({ text, nonce: Date.now() });
     setTab("ask");
+  }
+
+  function confirmAction(a: PallyAction) {
+    setPlan((p) => {
+      const next = applyAction(p, a);
+      savePlan(account.id, next);
+      return next;
+    });
+    showToast(a.type === "set_spending_limit" ? "Limit set ✓" : a.type === "create_savings_goal" ? "Savings goal started ✓" : "Reminder set ✓");
+  }
+
+  function removeFromPlan(kind: keyof Plan, index: number) {
+    setPlan((p) => {
+      const next = { ...p, [kind]: p[kind].filter((_, i) => i !== index) } as Plan;
+      savePlan(account.id, next);
+      return next;
+    });
   }
 
   function showToast(text: string) {
@@ -227,6 +247,63 @@ function Main({ account, onLogout }: { account: Account; onLogout: () => void })
               </div>
             </div>
 
+            <Section title="Your plan with Pally">
+              {plan.limits.length + plan.goals.length + plan.reminders.length === 0 ? (
+                <div className="card p-4 text-sm text-muted">
+                  Nothing set up yet. Ask Pally to set a spending limit, start a savings goal or remind you about a bill.
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {["Set a limit for betting", "Help me save ₦100,000 for rent", "Remind me to pay my electricity bill on Friday"].map((q) => (
+                      <button key={q} onClick={() => askAbout(q)} className="chip bg-pp-soft text-xs text-pp">
+                        💬 {q}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="card divide-y divide-pp-soft">
+                  {limitProgress(plan, txns).map((l, i) => (
+                    <div key={"l" + l.category} className="p-3 text-sm">
+                      <div className="flex justify-between gap-2">
+                        <span className="font-semibold">🎯 {l.category} limit</span>
+                        <span className={l.over ? "font-bold text-bad" : "font-semibold"}>
+                          {naira(l.spent)} / {naira(l.amount)}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 h-2 rounded-full bg-pp-soft">
+                        <div className={`h-full rounded-full ${l.over ? "bg-bad" : l.spent > l.amount * 0.8 ? "bg-warn" : "bg-pp"}`} style={{ width: `${Math.min(100, (l.spent / l.amount) * 100)}%` }} />
+                      </div>
+                      <div className="mt-1 flex justify-between text-xs text-muted">
+                        <span>{l.over ? `Over by ${naira(-l.left)} this month` : `${naira(l.left)} left this month`}</span>
+                        <button onClick={() => removeFromPlan("limits", i)} className="font-semibold">Remove</button>
+                      </div>
+                    </div>
+                  ))}
+                  {plan.goals.map((g, i) => (
+                    <div key={"g" + g.name} className="flex items-center justify-between gap-2 p-3 text-sm">
+                      <div>
+                        <div className="font-semibold">🐷 {g.name}</div>
+                        <div className="text-xs text-muted">
+                          Target {naira(g.target)}
+                          {g.monthly ? ` · ${naira(g.monthly)} a month in CashBox` : ""}
+                          {g.by ? ` · by ${new Date(g.by + "T12:00:00").toLocaleDateString("en-NG", { day: "numeric", month: "short" })}` : ""}
+                        </div>
+                      </div>
+                      <button onClick={() => removeFromPlan("goals", i)} className="text-xs font-semibold text-muted">Remove</button>
+                    </div>
+                  ))}
+                  {plan.reminders.map((r, i) => (
+                    <div key={"r" + i} className="flex items-center justify-between gap-2 p-3 text-sm">
+                      <div>
+                        <div className="font-semibold">⏰ {r.message}</div>
+                        <div className="text-xs text-muted">{new Date(r.date + "T12:00:00").toLocaleDateString("en-NG", { weekday: "long", day: "numeric", month: "short" })}</div>
+                      </div>
+                      <button onClick={() => removeFromPlan("reminders", i)} className="text-xs font-semibold text-muted">Remove</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Section>
+
             <Section title="Insights for you" right={<span className="text-xs text-muted">{insights.length} found</span>}>
               <div className="space-y-3">
                 {insights.map((i) => (
@@ -298,6 +375,8 @@ function Main({ account, onLogout }: { account: Account; onLogout: () => void })
             language={language}
             facts={facts}
             sheet={sheet}
+            plan={plan}
+            onConfirmAction={confirmAction}
             sourceLabel={fromUpload ? "your uploaded statement" : "your PalmPay account"}
             pending={pending}
             busyUpload={busyUpload}

@@ -1,5 +1,6 @@
 import type { Facts } from "./analyse";
 import { naira } from "./format";
+import { limitProgress, type PallyAction, type Plan } from "./plan";
 import { applyFilters, runTool, type Filters } from "./tools";
 import type { Category, Txn } from "./types";
 
@@ -10,6 +11,35 @@ export interface LocalReply {
   text: string;
   evidence?: { date: string; description: string; amount: number; direction: "in" | "out" }[];
   followups?: string[];
+  actions?: PallyAction[];
+  chart?: { title: string; rows: { label: string; value: number }[] };
+}
+
+/** Reads amounts like "20k", "₦20,000", "1.5m", "50 thousand". */
+function amountIn(q: string): number | null {
+  const m = q.match(/(?:₦|#|\bn)?\s?(\d[\d,]*(?:\.\d+)?)\s?(k|m|million|thousand)?\b/i);
+  if (!m) return null;
+  let n = parseFloat(m[1].replace(/,/g, ""));
+  const unit = (m[2] ?? "").toLowerCase();
+  if (unit === "k" || unit === "thousand") n *= 1000;
+  if (unit === "m" || unit === "million") n *= 1_000_000;
+  return n >= 100 ? Math.round(n) : null;
+}
+
+const WEEK = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+function reminderDate(q: string, asOf: string): string {
+  const now = new Date(asOf.slice(0, 10) + "T12:00:00");
+  const day = (d: Date) => d.toISOString().slice(0, 10);
+  if (/today/.test(q)) return day(now);
+  const wd = WEEK.findIndex((w) => q.includes(w));
+  if (wd >= 0) return day(new Date(now.getTime() + (((wd - now.getDay() + 7) % 7) || 7) * 86_400_000));
+  const dom = q.match(/on the (\d{1,2})|on (\d{1,2})(?:st|nd|rd|th)/);
+  if (dom) {
+    const d = Number(dom[1] ?? dom[2]);
+    const t = new Date(now.getFullYear(), now.getMonth() + (d <= now.getDate() ? 1 : 0), d, 12);
+    return day(t);
+  }
+  return day(new Date(now.getTime() + 86_400_000)); // tomorrow
 }
 
 const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
@@ -89,12 +119,58 @@ export function overviewText(f: Facts, name: string) {
   );
 }
 
-export function localAnswer(question: string, txns: Txn[], f: Facts, name: string): LocalReply {
+export function localAnswer(question: string, txns: Txn[], f: Facts, name: string, plan?: Plan): LocalReply {
   const q = question.toLowerCase();
   const r = rangeFrom(q, f.asOf);
   const inRange = applyFilters(txns, { from: r.from, to: r.to } as Filters);
   const outs = inRange.filter((x) => x.direction === "out" && !NOT_SPEND.has(x.category));
   const ins = inRange.filter((x) => x.direction === "in" && !NOT_INCOME.has(x.category));
+
+  // Actions: reminders, spending limits, savings goals (proposed as cards the user confirms)
+  if (/remind/.test(q)) {
+    const what = (q.match(/remind me (?:to |about )?(.+?)(?: on | by | tomorrow| today| next |$)/)?.[1] ?? "check my PalmPay").replace(/[?.!]+$/, "");
+    const date = reminderDate(q, f.asOf);
+    return {
+      text: `Sure. I’ll remind you to ${what.replace(/\bmy\b/g, "your")} on ${new Date(date + "T12:00:00").toLocaleDateString("en-NG", { weekday: "long", day: "numeric", month: "short" })}. Tap Confirm to set it.`,
+      actions: [{ type: "set_reminder", message: what[0].toUpperCase() + what.slice(1), date }],
+      followups: ["Show my plan", "Set a limit for betting", "Help me save for rent"],
+    };
+  }
+  if (/limit|cap|budget/.test(q) && !/how am i|doing|my (limit|limits|budget)s?\b.*\?/.test(q)) {
+    const cat = CATS.find(([re]) => re.test(q))?.[1];
+    if (cat) {
+      const from90 = iso(new Date(new Date(f.asOf).getTime() - 89 * DAY));
+      const avg = sum(applyFilters(txns, { from: from90, direction: "out", category: cat })) / 3;
+      const amount = amountIn(q) ?? Math.max(1000, Math.round((avg * 0.8) / 1000) * 1000);
+      return {
+        text: `You spend about ${naira(avg)} a month on ${cat}. ${amountIn(q) ? "" : "A limit 20% lower is a good start. "}I’ll set a monthly limit of ${naira(amount)} and show how much is left. Tap Confirm to set it.`,
+        actions: [{ type: "set_spending_limit", category: cat, amount }],
+        followups: ["Show my plan", `What if I cut ${cat} by half?`, "Help me save for rent"],
+      };
+    }
+  }
+  const goal = q.match(/save (?:up )?(?:.*?)for (?:a |an |my )?([a-z][a-z ]{1,30})|savings? goal(?: for (?:a |an |my )?([a-z][a-z ]{1,30}))?/);
+  if (goal && !/how much did i save|how much have i saved/.test(q)) {
+    const goalName = (goal[1] ?? goal[2] ?? "Savings").replace(/\b(by|in|before|this|next)\b.*$/, "").trim() || "Savings";
+    const target = amountIn(q) ?? 100_000;
+    const monthly = Math.round(target / 3 / 1000) * 1000;
+    const label = goalName[0].toUpperCase() + goalName.slice(1);
+    return {
+      text: `Let’s save ${naira(target)} for ${label}. Putting ${naira(monthly)} a month into CashBox gets you there in about 3 months, and it earns daily interest. Tap Confirm to start the goal.`,
+      actions: [{ type: "create_savings_goal", name: label, target, monthly }],
+      followups: ["What should I cut first?", "Show my plan", "Set a limit for food"],
+    };
+  }
+  if (/my plan|my limits?|my goals?|my reminders?|how am i doing on/.test(q)) {
+    if (!plan || (!plan.limits.length && !plan.goals.length && !plan.reminders.length))
+      return { text: "You haven’t set anything up yet. I can set a spending limit, start a savings goal or remind you about a bill.", followups: ["Set a limit for betting", "Help me save for rent", "Remind me to pay electricity on Friday"] };
+    const parts = [
+      ...limitProgress(plan, txns).map((l) => `${l.category} limit ${naira(l.amount)}: ${naira(l.spent)} used${l.over ? ", over the limit" : `, ${naira(l.left)} left`}`),
+      ...plan.goals.map((g) => `${g.name} goal ${naira(g.target)}${g.monthly ? ` (${naira(g.monthly)} a month)` : ""}`),
+      ...plan.reminders.map((r) => `Reminder on ${r.date}: ${r.message}`),
+    ];
+    return { text: `Here’s your plan:\n${parts.join("\n")}`, followups: ["What should I cut first?", "Explain my month", "Set a limit for food"] };
+  }
 
   // Overview / explain
   if (/explain|summary|summar|overview|how am i doing|my month|what('?s| is) going on|break.?down my month|how (is|was) my/.test(q) && !CATS.some(([re]) => re.test(q))) {
@@ -198,6 +274,7 @@ export function localAnswer(question: string, txns: Txn[], f: Facts, name: strin
     const b = runTool("breakdown", { by: "counterparty" }, pool) as { key: string; total: number; count: number }[];
     if (!b.length) return { text: `I couldn't find any ${incoming ? "money received" : "transfers"} ${r.label}.` };
     return {
+      chart: { title: "By person / merchant", rows: b.slice(0, 6).map((x) => ({ label: x.key, value: x.total })) },
       text: `${incoming ? "Who sent you the most" : "Who you sent the most to"} ${r.label}: ${b.slice(0, 5).map((x, i) => `${i + 1}. ${x.key}: ${naira(x.total)} (${x.count}×)`).join("\n")}`,
       followups: [incoming ? "Who do I send the most money to?" : "Who sends me the most money?", "Biggest payments this month", "Explain my month"],
     };
@@ -237,6 +314,7 @@ export function localAnswer(question: string, txns: Txn[], f: Facts, name: strin
   if (/spen|spent|expens|money out|went out|where did|where (does|is) my money/.test(q)) {
     const b = runTool("breakdown", { by: "category" }, outs) as { key: string; total: number }[];
     return {
+      chart: { title: "By category", rows: b.slice(0, 6).map((x) => ({ label: x.key, value: x.total })) },
       text: `You spent ${naira(sum(outs))} ${r.label}. By category: ${b.slice(0, 5).map((x) => `${x.key} ${naira(x.total)}`).join(", ")}.`,
       evidence: ev(outs, 4),
       followups: [`Show me my ${b[0]?.key ?? "food"} spending`, "What should I cut first?", "Who do I send the most money to?"],

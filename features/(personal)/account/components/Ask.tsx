@@ -4,9 +4,12 @@ import type { Facts } from "../lib/analyse";
 import { naira, prettyDate } from "../lib/format";
 import { localAnswer, type LocalReply } from "../lib/localAnswer";
 import type { Txn } from "../lib/types";
-import { RichText } from "./ui";
+import type { PallyAction, Plan } from "../lib/plan";
+import { ActionCard, MiniChart, RichText } from "./ui";
 
 interface Msg extends LocalReply {
+  /** What the user did with each proposed action card. */
+  done?: Record<number, "confirmed" | "dismissed">;
   role: "user" | "assistant";
 }
 
@@ -18,9 +21,9 @@ export interface PendingQuestion {
 const STARTERS = [
   "Explain my month in simple words",
   "Where did my money go this month?",
-  "Who do I send the most money to?",
-  "What should I cut first?",
-  "Tell me about my loans",
+  "Set a limit for betting",
+  "Help me save ₦100,000 for rent",
+  "Remind me to pay my electricity bill on Friday",
 ];
 
 
@@ -30,6 +33,8 @@ interface Props {
   language: string;
   facts: Facts;
   sheet: unknown;
+  plan: Plan;
+  onConfirmAction: (a: PallyAction) => void;
   sourceLabel: string;
   pending: PendingQuestion | null;
   busyUpload: boolean;
@@ -37,7 +42,7 @@ interface Props {
   onDashboard: () => void;
 }
 
-export default function Ask({ txns, name, language, facts, sheet, sourceLabel, pending, busyUpload, onUpload, onDashboard }: Props) {
+export default function Ask({ txns, name, language, facts, sheet, plan, onConfirmAction, sourceLabel, pending, busyUpload, onUpload, onDashboard }: Props) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -72,14 +77,14 @@ export default function Ask({ txns, name, language, facts, sheet, sourceLabel, p
       const r = await fetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: q, history: history.map(({ role, text }) => ({ role, text })), txns, facts: sheet, name, language }),
+        body: JSON.stringify({ question: q, history: history.map(({ role, text }) => ({ role, text })), txns, facts: sheet, name, language, plan }),
       });
       const j = await r.json();
       if (!j.answer) throw new Error(j.error ?? "no answer");
-      reply = { role: "assistant", text: j.answer, followups: j.followups, evidence: j.evidence };
+      reply = { role: "assistant", text: j.answer, followups: j.followups, evidence: j.evidence, actions: j.actions, chart: j.chart ?? undefined };
     } catch {
       // AI unavailable: answer from the transactions directly (exact, just less chatty).
-      reply = { role: "assistant", ...localAnswer(q, txns, facts, name) };
+      reply = { role: "assistant", ...localAnswer(q, txns, facts, name, plan) };
     }
     setMsgs((m) => [...m, reply]);
     setBusy(false);
@@ -192,6 +197,19 @@ export default function Ask({ txns, name, language, facts, sheet, sourceLabel, p
                   <Volume2 size={14} /> Listen
                 </button>
               )}
+              {m.chart && m.chart.rows.length > 1 && <MiniChart title={m.chart.title} rows={m.chart.rows} />}
+              {m.actions?.map((a, j) => (
+                <ActionCard
+                  key={j}
+                  action={a}
+                  status={m.done?.[j]}
+                  onConfirm={() => {
+                    onConfirmAction(a);
+                    setMsgs((all) => all.map((x, k) => (k === i ? { ...x, done: { ...x.done, [j]: "confirmed" } } : x)));
+                  }}
+                  onDismiss={() => setMsgs((all) => all.map((x, k) => (k === i ? { ...x, done: { ...x.done, [j]: "dismissed" } } : x)))}
+                />
+              ))}
               {m.evidence && m.evidence.length > 0 && (
                 <div className="mt-2 rounded-xl bg-pp-soft/60 p-2">
                   <div className="mb-1 flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-pp">
