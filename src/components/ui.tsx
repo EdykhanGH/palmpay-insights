@@ -15,7 +15,7 @@ const TONE: Record<Severity, { bg: string; fg: string; label: string }> = {
   good: { bg: "bg-ok-soft", fg: "text-ok", label: "Well done" },
 };
 
-export function InsightCard({ insight, onAction }: { insight: Insight; onAction?: (i: Insight) => void }) {
+export function InsightCard({ insight, onAction, onAsk }: { insight: Insight; onAction?: (i: Insight) => void; onAsk?: (q: string) => void }) {
   const Icon = ICONS[insight.icon] ?? Lightbulb;
   const tone = TONE[insight.severity];
   return (
@@ -35,6 +35,18 @@ export function InsightCard({ insight, onAction }: { insight: Insight; onAction?
             >
               {insight.action} →
             </button>
+          )}
+          {onAsk && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {[
+                ["💬 Why?", `Why is this happening: "${insight.title}"? Show me the transactions behind it.`],
+                ["What should I do?", `What should I do about this: "${insight.title}"?`],
+              ].map(([label, q]) => (
+                <button key={label} onClick={() => onAsk(q)} className="rounded-full border border-pp/20 px-3 py-1 text-xs font-semibold text-pp hover:bg-pp-soft">
+                  {label}
+                </button>
+              ))}
+            </div>
           )}
         </div>
       </div>

@@ -1,7 +1,7 @@
 import type { Facts } from "../lib/analyse";
 import { monthName, naira, nairaShort } from "../lib/format";
 
-export function CategoryBars({ facts }: { facts: Facts }) {
+export function CategoryBars({ facts, onAsk }: { facts: Facts; onAsk?: (q: string) => void }) {
   const rows = facts.byCategory.filter((c) => c.category !== "Savings").slice(0, 7);
   const max = Math.max(1, ...rows.map((r) => Math.max(r.amount, r.usual)));
   return (
@@ -10,7 +10,11 @@ export function CategoryBars({ facts }: { facts: Facts }) {
         {rows.map((r) => {
           const over = r.usual > 0 && r.amount > r.usual * 1.4;
           return (
-            <div key={r.category}>
+            <button
+              key={r.category}
+              className="block w-full rounded-lg text-left hover:bg-pp-soft/40"
+              onClick={() => onAsk?.(`Break down my ${r.category} spending this month (${naira(r.amount)}). What did it go on?`)}
+            >
               <div className="flex justify-between text-sm">
                 <span className="font-semibold">{r.category}</span>
                 <span className={over ? "font-bold text-bad" : "font-semibold"}>{naira(r.amount)}</span>
@@ -25,11 +29,11 @@ export function CategoryBars({ facts }: { facts: Facts }) {
                   />
                 )}
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
-      <p className="mt-3 text-xs text-muted">Bars show this month so far. The dark tick is what you usually spend by day {facts.monthDay}.</p>
+      <p className="mt-3 text-xs text-muted">Bars show this month so far. The dark tick is what you usually spend by day {facts.monthDay}. Tap a category to ask about it.</p>
     </div>
   );
 }

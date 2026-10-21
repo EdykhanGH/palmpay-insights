@@ -36,6 +36,20 @@ export const TOOLS = [
       required: ["by"],
     },
   },
+  {
+    name: "what_if",
+    description:
+      "Simulate cutting spending: given a category or search text and a cut percentage, returns the last-30-day spend and how much would be saved per month and per year.",
+    input_schema: {
+      type: "object",
+      properties: {
+        category: { type: "string", enum: CATEGORIES },
+        search: filterProps.search,
+        cut_percent: { type: "number", description: "0-100" },
+      },
+      required: ["cut_percent"],
+    },
+  },
 ];
 
 export interface Filters {
@@ -86,6 +100,14 @@ export function runTool(name: string, input: Record<string, unknown>, txns: Txn[
       m.set(k, v);
     }
     return [...m.entries()].map(([key, v]) => ({ key, ...v })).sort((a, b) => b.total - a.total).slice(0, 20);
+  }
+  if (name === "what_if") {
+    const end = txns[txns.length - 1]?.date.slice(0, 10) ?? "";
+    const from = new Date(new Date(end).getTime() - 30 * 86_400_000).toISOString().slice(0, 10);
+    const spent = applyFilters(txns, { ...(input as Filters), direction: "out", from }).reduce((s, x) => s + x.amount, 0);
+    const cut = Math.max(0, Math.min(100, Number(input.cut_percent ?? 0)));
+    const monthly = Math.round((spent * cut) / 100);
+    return { spent_last_30_days: spent, cut_percent: cut, saved_per_month: monthly, saved_per_year: monthly * 12, new_monthly_spend: spent - monthly };
   }
   return { error: `Unknown tool ${name}` };
 }

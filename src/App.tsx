@@ -1,6 +1,6 @@
 import { BarChart3, List, MessageCircle, Sparkles, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import Ask from "./components/Ask";
+import Ask, { type PendingQuestion } from "./components/Ask";
 import { CategoryBars, MonthlyBars } from "./components/Charts";
 import { InsightCard, ScoreRing, Section } from "./components/ui";
 import { buildInsights, computeFacts, factSheet, perMonth } from "./lib/analyse";
@@ -20,6 +20,7 @@ export default function App() {
   const [noteLoading, setNoteLoading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [pending, setPending] = useState<PendingQuestion | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const persona = PERSONAS.find((p) => p.id === source);
@@ -61,6 +62,11 @@ export default function App() {
     } catch (e) {
       setUploadError((e as Error).message);
     }
+  }
+
+  function askAbout(text: string) {
+    setPending({ text, nonce: Date.now() });
+    setTab("ask");
   }
 
   function onAction(i: Insight) {
@@ -158,18 +164,28 @@ export default function App() {
               ) : (
                 <p className="mt-2 whitespace-pre-line text-sm leading-relaxed">{note ?? fallbackNote}</p>
               )}
+              <div className="mt-3 flex flex-wrap gap-2">
+                {["Explain my month in simple words", "What should I cut first?"].map((q) => (
+                  <button key={q} onClick={() => askAbout(q)} className="chip bg-pp-soft text-xs text-pp hover:bg-pp hover:text-white">
+                    💬 {q}
+                  </button>
+                ))}
+                <button onClick={() => setTab("ask")} className="chip bg-pp text-xs text-white">
+                  Chat with your coach →
+                </button>
+              </div>
             </div>
 
             <Section title="Insights for you" right={<span className="text-xs text-muted">{insights.length} found</span>}>
               <div className="space-y-3">
                 {insights.map((i) => (
-                  <InsightCard key={i.id} insight={i} onAction={onAction} />
+                  <InsightCard key={i.id} insight={i} onAction={onAction} onAsk={askAbout} />
                 ))}
               </div>
             </Section>
 
             <Section title={`Where your money went in ${monthName(facts.month)}`}>
-              <CategoryBars facts={facts} />
+              <CategoryBars facts={facts} onAsk={askAbout} />
             </Section>
 
             <Section title="Month by month">
@@ -200,11 +216,17 @@ export default function App() {
           </>
         )}
 
-        {tab === "ask" && (
-          <div className="mt-4">
-            <Ask txns={txns} name={name} language={language} />
-          </div>
-        )}
+        {/* Kept mounted so the conversation survives switching tabs. */}
+        <div className={tab === "ask" ? "mt-4" : "hidden"}>
+          <Ask
+            txns={txns}
+            name={name}
+            language={language}
+            facts={factSheet(facts, insights)}
+            overview={note ?? fallbackNote}
+            pending={pending}
+          />
+        </div>
 
         {tab === "history" && (
           <Section title={`${txns.length} transactions`}>
@@ -241,7 +263,7 @@ export default function App() {
         {(
           [
             ["insights", "Insights", BarChart3],
-            ["ask", "Ask PalmPay", MessageCircle],
+            ["ask", "Chat", MessageCircle],
             ["history", "Transactions", List],
           ] as const
         ).map(([id, label, Icon]) => (
