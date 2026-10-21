@@ -1,21 +1,12 @@
-import { Receipt, Send, Sparkles } from "lucide-react";
+import { LayoutDashboard, Paperclip, Receipt, Send, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import type { Facts } from "../lib/analyse";
 import { naira, prettyDate } from "../lib/format";
-import { runTool } from "../lib/tools";
-import type { Txn } from "../lib/types";
+import { localAnswer, type LocalReply } from "../lib/localAnswer";
+import type { Insight, Txn } from "../lib/types";
 
-interface Evidence {
-  date: string;
-  description: string;
-  amount: number;
-  direction: "in" | "out";
-}
-
-interface Msg {
+interface Msg extends LocalReply {
   role: "user" | "assistant";
-  text: string;
-  followups?: string[];
-  evidence?: Evidence[];
 }
 
 export interface PendingQuestion {
@@ -25,59 +16,41 @@ export interface PendingQuestion {
 
 const STARTERS = [
   "Explain my month in simple words",
-  "Why is my balance so low?",
+  "Where did my money go this month?",
+  "Who do I send the most money to?",
   "What should I cut first?",
-  "What if I cut betting by half?",
+  "Tell me about my loans",
 ];
 
-const CATS: [RegExp, string][] = [
-  [/bet/, "Betting"], [/data|airtime/, "Airtime & Data"], [/food|eat|grocer/, "Food & Groceries"], [/transport|bolt|uber|ride/, "Transport"],
-  [/subscri|netflix|dstv|showmax/, "Subscriptions"], [/fee|charge/, "Fees & Charges"], [/pos|cash/, "Cash Withdrawal"], [/rent/, "Rent"],
-  [/shop|jumia/, "Shopping"], [/family|mum|mama|friend/, "Family & Friends"], [/supplier|stock|business/, "Business & Suppliers"],
-];
-
-// Used only when the AI can't be reached, so the demo never dead-ends. Still exact: it runs the same tools.
-function offlineAnswer(q: string, txns: Txn[]): Msg {
-  const s = q.toLowerCase();
-  const hit = CATS.find(([re]) => re.test(s));
-  if (hit) {
-    const cat = hit[1];
-    const end = txns[txns.length - 1]?.date.slice(0, 10) ?? "";
-    const from = new Date(new Date(end).getTime() - 30 * 86_400_000).toISOString().slice(0, 10);
-    const r = runTool("sum_transactions", { category: cat, direction: "out", from }, txns) as { total: number; count: number };
-    const ev = runTool("list_transactions", { category: cat, direction: "out", from, limit: 5 }, txns) as Evidence[];
-    const half = runTool("what_if", { category: cat, cut_percent: 50 }, txns) as { saved_per_month: number; saved_per_year: number };
-    return {
-      role: "assistant",
-      text: `In the last 30 days you spent ${naira(r.total)} on ${cat} across ${r.count} payments. Cutting it by half would save about ${naira(half.saved_per_month)} a month (${naira(half.saved_per_year)} a year).`,
-      evidence: ev,
-      followups: [`Set a limit for ${cat}`, "What else can I cut?", "Explain my month in simple words"],
-    };
-  }
-  const b = runTool("breakdown", { by: "category", direction: "out" }, txns) as { key: string; total: number }[];
-  return {
-    role: "assistant",
-    text: `Your biggest spending areas are ${b.slice(0, 3).map((x) => `${x.key} (${naira(x.total)})`).join(", ")}. Tap one below to dig in.`,
-    followups: b.slice(0, 3).map((x) => `Show me my ${x.key} spending`),
-  };
-}
+const TONE: Record<Insight["severity"], string> = {
+  alert: "border-bad/30 bg-bad-soft text-bad",
+  warn: "border-warn/30 bg-warn-soft text-warn",
+  tip: "border-tip/30 bg-tip-soft text-tip",
+  good: "border-ok/30 bg-ok-soft text-ok",
+};
 
 interface Props {
   txns: Txn[];
   name: string;
   language: string;
-  facts: unknown;
+  facts: Facts;
+  sheet: unknown;
+  insights: Insight[];
   overview: string;
+  sourceLabel: string;
   pending: PendingQuestion | null;
+  busyUpload: boolean;
+  onUpload: () => void;
+  onDashboard: () => void;
 }
 
-export default function Ask({ txns, name, language, facts, overview, pending }: Props) {
+export default function Ask({ txns, name, language, facts, sheet, insights, overview, sourceLabel, pending, busyUpload, onUpload, onDashboard }: Props) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const end = useRef<HTMLDivElement>(null);
 
-  // A new account starts a fresh conversation.
+  // New data starts a fresh conversation.
   useEffect(() => setMsgs([]), [txns]);
   useEffect(() => end.current?.scrollIntoView({ behavior: "smooth", block: "end" }), [msgs, busy]);
   useEffect(() => {
@@ -96,37 +69,65 @@ export default function Ask({ txns, name, language, facts, overview, pending }: 
       const r = await fetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: q, history: history.map(({ role, text }) => ({ role, text })), txns, facts, name, language }),
+        body: JSON.stringify({ question: q, history: history.map(({ role, text }) => ({ role, text })), txns, facts: sheet, name, language }),
       });
       const j = await r.json();
-      reply = j.answer ? { role: "assistant", text: j.answer, followups: j.followups, evidence: j.evidence } : offlineAnswer(q, txns);
+      if (!j.answer) throw new Error(j.error ?? "no answer");
+      reply = { role: "assistant", text: j.answer, followups: j.followups, evidence: j.evidence };
     } catch {
-      reply = offlineAnswer(q, txns);
+      // AI unavailable: answer from the transactions directly (exact, just less chatty).
+      reply = { role: "assistant", ...localAnswer(q, txns, facts, name) };
     }
     setMsgs((m) => [...m, reply]);
     setBusy(false);
   }
 
   const lastFollowups = [...msgs].reverse().find((m) => m.role === "assistant")?.followups ?? (msgs.length ? [] : STARTERS);
+  const first = txns[0]?.date.slice(0, 10);
+  const lastDay = txns[txns.length - 1]?.date.slice(0, 10);
+  const fmt = (d?: string) => (d ? new Date(d + "T12:00:00").toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }) : "");
 
   return (
-    <div className="flex min-h-[60vh] flex-col">
+    <div className="flex min-h-[70vh] flex-col">
       <div className="flex-1 space-y-3">
-        {/* The monthly overview opens the conversation. */}
+        <div className="flex items-center justify-between rounded-xl bg-white px-3 py-2 text-xs text-muted shadow-card">
+          <span>
+            Reading <b className="text-pp-ink">{sourceLabel}</b> · {txns.length} transactions · {fmt(first)} to {fmt(lastDay)}
+          </span>
+          <button onClick={onDashboard} className="flex items-center gap-1 font-bold text-pp">
+            <LayoutDashboard size={14} /> Dashboard
+          </button>
+        </div>
+
+        {/* The overview opens the conversation, with the top insights attached. */}
         <div className="flex justify-start">
-          <div className="max-w-[90%] rounded-2xl rounded-bl-sm bg-white px-4 py-3 text-sm leading-relaxed shadow-card">
+          <div className="max-w-[92%] rounded-2xl rounded-bl-sm bg-white px-4 py-3 text-sm leading-relaxed shadow-card">
             <div className="mb-1 flex items-center gap-1.5 text-xs font-bold text-pp">
-              <Sparkles size={14} /> Your month so far
+              <Sparkles size={14} /> PalmPay AI
             </div>
             <div className="whitespace-pre-line">{overview}</div>
-            <div className="mt-2 text-xs text-muted">Ask me anything about it. I'll show you the transactions behind every answer.</div>
+            {insights.length > 0 && (
+              <div className="mt-3 space-y-2">
+                <div className="text-xs font-semibold text-muted">I noticed {insights.length} things. Tap one to ask about it:</div>
+                {insights.slice(0, 4).map((i) => (
+                  <button
+                    key={i.id}
+                    onClick={() => ask(`Tell me more about this: "${i.title}". Why is it happening and what should I do?`)}
+                    className={`block w-full rounded-xl border px-3 py-2 text-left text-xs font-semibold ${TONE[i.severity]}`}
+                  >
+                    {i.title} →
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="mt-3 text-xs text-muted">Ask me anything about your transactions. I'll show you the payments behind every answer.</div>
           </div>
         </div>
 
         {msgs.map((m, i) => (
           <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
             <div
-              className={`max-w-[90%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+              className={`max-w-[92%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                 m.role === "user" ? "rounded-br-sm bg-pp text-white" : "rounded-bl-sm bg-white shadow-card"
               }`}
             >
@@ -153,7 +154,11 @@ export default function Ask({ txns, name, language, facts, overview, pending }: 
             </div>
           </div>
         ))}
-        {busy && <div className="w-28 animate-pulse rounded-2xl bg-white px-4 py-2.5 text-sm text-muted shadow-card">Looking…</div>}
+        {(busy || busyUpload) && (
+          <div className="w-40 animate-pulse rounded-2xl bg-white px-4 py-2.5 text-sm text-muted shadow-card">
+            {busyUpload ? "Reading statement…" : "Looking…"}
+          </div>
+        )}
 
         {!busy && lastFollowups.length > 0 && (
           <div className="flex flex-wrap gap-2">
@@ -173,13 +178,22 @@ export default function Ask({ txns, name, language, facts, overview, pending }: 
           ask(input);
         }}
       >
+        <button
+          type="button"
+          onClick={onUpload}
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white text-pp shadow-card"
+          aria-label="Upload a statement"
+          title="Upload a PalmPay statement (PDF, Excel or CSV)"
+        >
+          <Paperclip size={18} />
+        </button>
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask about your money…"
-          className="flex-1 rounded-full border border-pp/20 bg-white px-4 py-3 text-sm shadow-card outline-none focus:border-pp"
+          className="min-w-0 flex-1 rounded-full border border-pp/20 bg-white px-4 py-3 text-sm shadow-card outline-none focus:border-pp"
         />
-        <button disabled={busy} className="flex h-12 w-12 items-center justify-center rounded-full bg-pp text-white disabled:opacity-50" aria-label="Send">
+        <button disabled={busy} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-pp text-white disabled:opacity-50" aria-label="Send">
           <Send size={18} />
         </button>
       </form>

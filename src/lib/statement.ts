@@ -50,6 +50,10 @@ function toIso(v: unknown): string | null {
 }
 
 export async function readStatement(file: File): Promise<Txn[]> {
+  if (/\.pdf$/i.test(file.name) || file.type === "application/pdf") {
+    const { readPdfStatement } = await import("./pdfStatement");
+    return readPdfStatement(file);
+  }
   // CSV cells stay as text so dd/mm/yyyy dates aren't misread as US mm/dd.
   const wb = /\.csv$/i.test(file.name)
     ? XLSX.read(await file.text(), { type: "string", raw: true })

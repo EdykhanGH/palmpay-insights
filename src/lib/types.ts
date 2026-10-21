@@ -3,6 +3,12 @@ export type Direction = "in" | "out";
 export type Category =
   | "Income"
   | "Transfers received"
+  | "Interest"
+  | "From Savings"
+  | "Loan received"
+  | "Transfers to people"
+  | "Transfers to self"
+  | "Church & Giving"
   | "Food & Groceries"
   | "Transport"
   | "Airtime & Data"

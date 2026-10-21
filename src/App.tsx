@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronRight, Home as HomeIcon, Languages, LogOut, MessageCircle, Shield, Sparkles, Upload, User } from "lucide-react";
+import { ArrowLeft, ChevronRight, Home as HomeIcon, LayoutDashboard, Languages, List, LogOut, Shield, Sparkles, Upload, User } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Ask, { type PendingQuestion } from "./components/Ask";
 import { CategoryBars, MonthlyBars } from "./components/Charts";
@@ -6,12 +6,14 @@ import { InsightCard, ScoreRing, Section } from "./components/ui";
 import { accountFor, maskPhone, saveSession, savedSession } from "./lib/accounts";
 import { buildInsights, computeFacts, factSheet, perMonth } from "./lib/analyse";
 import { monthName, naira, prettyDate } from "./lib/format";
+import { overviewText } from "./lib/localAnswer";
 import { openingBalance, seedTransactions } from "./lib/seed";
 import { readStatement } from "./lib/statement";
 import type { Insight, Txn } from "./lib/types";
 import Home from "./screens/Home";
 import Login from "./screens/Login";
 
+// "ask" is the Insights chat (the main feature); "insights" is the dashboard of cards and charts behind it.
 type Tab = "home" | "insights" | "ask" | "history" | "me";
 
 export default function App() {
@@ -52,11 +54,13 @@ function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void
   const [toast, setToast] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingQuestion | null>(null);
+  const [busyUpload, setBusyUpload] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const fromUpload = useUpload && !!uploaded;
   const txns = useMemo(() => (fromUpload ? uploaded!.txns : seedTransactions(personaId)), [fromUpload, uploaded, personaId]);
-  const facts = useMemo(() => computeFacts(txns, fromUpload ? 0 : openingBalance(personaId)), [txns, fromUpload, personaId]);
+  const facts = useMemo(() => computeFacts(txns, fromUpload ? undefined : openingBalance(personaId)), [txns, fromUpload, personaId]);
+  const accountFacts = useMemo(() => computeFacts(seedTransactions(personaId), openingBalance(personaId)), [personaId]);
   const insights = useMemo(() => buildInsights(facts), [facts]);
   const sheet = useMemo(() => factSheet(facts, insights), [facts, insights]);
 
@@ -84,13 +88,17 @@ function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void
   async function onFile(f: File | undefined) {
     if (!f) return;
     setUploadError(null);
+    setBusyUpload(true);
+    setTab("ask");
     try {
       const t = await readStatement(f);
       setUploaded({ name: f.name, txns: t });
       setUseUpload(true);
-      setTab("insights");
     } catch (e) {
       setUploadError((e as Error).message);
+      showToast((e as Error).message);
+    } finally {
+      setBusyUpload(false);
     }
   }
 
@@ -106,10 +114,7 @@ function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void
 
   const onAction = (i: Insight) => showToast(`"${i.action}" would open here in the PalmPay app.`);
 
-  const fallbackNote = insights
-    .slice(0, 3)
-    .map((i) => `• ${i.title}${i.action ? `. ${i.action}.` : "."}`)
-    .join("\n");
+  const fallbackNote = overviewText(facts, fromUpload ? "there" : firstName);
 
   const subHeader = (title: string, back: Tab = "home") => (
     <div className="sticky top-0 z-10 flex items-center gap-3 bg-[#f6f3fb]/95 px-4 py-4 backdrop-blur">
@@ -125,10 +130,10 @@ function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void
       {tab === "home" && (
         <Home
           firstName={firstName}
-          facts={facts}
+          facts={{ ...facts, balance: accountFacts.balance }}
           insights={insights}
-          txns={txns}
-          onOpenInsights={() => setTab("insights")}
+          txns={seedTransactions(personaId)}
+          onOpenInsights={() => setTab("ask")}
           onAsk={askAbout}
           onSeeAll={() => setTab("history")}
           onDemo={(label) => showToast(`${label} isn't part of this demo. Try PalmPay Insights ✨`)}
@@ -139,11 +144,11 @@ function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void
         <>
           <header className="rounded-b-[28px] bg-gradient-to-br from-pp to-pp-dark px-4 pb-6 pt-4 text-white">
             <div className="flex items-center justify-between">
-              <button onClick={() => setTab("home")} className="rounded-full bg-white/15 p-2" aria-label="Back">
+              <button onClick={() => setTab("ask")} className="rounded-full bg-white/15 p-2" aria-label="Back to chat">
                 <ArrowLeft size={18} />
               </button>
               <div className="flex items-center gap-1.5 font-extrabold">
-                <Sparkles size={18} /> PalmPay Insights
+                <LayoutDashboard size={18} /> Insights dashboard
               </div>
               <button onClick={() => setLanguage(language === "english" ? "pidgin" : "english")} className="chip bg-white/15 text-xs text-white">
                 {language === "english" ? "English" : "Pidgin"} ⇄
@@ -159,9 +164,11 @@ function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void
                 <div className="text-sm">
                   Out <span className="font-extrabold">{naira(facts.thisMonth.spend)}</span>
                 </div>
-                <div className="text-sm">
-                  Balance <span className="font-extrabold">{naira(facts.balance)}</span>
-                </div>
+                {facts.balanceKnown && (
+                  <div className="text-sm">
+                    Balance <span className="font-extrabold">{naira(facts.balance)}</span>
+                  </div>
+                )}
               </div>
               <div className="text-center">
                 <ScoreRing score={facts.score} />
@@ -176,7 +183,7 @@ function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void
                 </button>
               )}
               <button onClick={() => fileRef.current?.click()} className="chip flex items-center gap-1 whitespace-nowrap bg-white/15 text-xs text-white">
-                <Upload size={14} /> Analyse a bank statement
+                <Upload size={14} /> Analyse a PalmPay statement (PDF)
               </button>
             </div>
             {uploadError && <div className="mt-2 rounded-lg bg-white/15 p-2 text-sm">{uploadError}</div>}
@@ -251,9 +258,42 @@ function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void
 
       {/* Kept mounted so the conversation survives switching tabs. */}
       <div className={tab === "ask" ? "" : "hidden"}>
-        {subHeader("Ask PalmPay ✨")}
-        <div className="px-4">
-          <Ask txns={txns} name={firstName} language={language} facts={sheet} overview={note ?? fallbackNote} pending={pending} />
+        <div className="sticky top-0 z-10 flex items-center justify-between bg-gradient-to-br from-pp to-pp-dark px-4 py-4 text-white">
+          <div className="flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15">
+              <Sparkles size={18} />
+            </div>
+            <div>
+              <div className="font-extrabold leading-tight">PalmPay Insights</div>
+              <div className="text-[11px] opacity-85">Your AI money assistant</div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {uploaded && (
+              <button onClick={() => setUseUpload(!useUpload)} className="chip bg-white/15 text-xs text-white">
+                {useUpload ? "Statement" : "Account"} ⇄
+              </button>
+            )}
+            <button onClick={() => setLanguage(language === "english" ? "pidgin" : "english")} className="chip bg-white/15 text-xs text-white">
+              {language === "english" ? "EN" : "Pidgin"} ⇄
+            </button>
+          </div>
+        </div>
+        <div className="px-4 pt-3">
+          <Ask
+            txns={txns}
+            name={fromUpload ? "there" : firstName}
+            language={language}
+            facts={facts}
+            sheet={sheet}
+            insights={insights}
+            overview={note ?? fallbackNote}
+            sourceLabel={fromUpload ? "your uploaded statement" : "your PalmPay account"}
+            pending={pending}
+            busyUpload={busyUpload}
+            onUpload={() => fileRef.current?.click()}
+            onDashboard={() => setTab("insights")}
+          />
         </div>
       </div>
 
@@ -292,7 +332,7 @@ function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void
             </div>
           </div>
           <div className="card mx-4 mt-4 divide-y divide-pp-soft">
-            <button onClick={() => setTab("insights")} className="flex w-full items-center gap-3 p-4 text-left font-semibold">
+            <button onClick={() => setTab("ask")} className="flex w-full items-center gap-3 p-4 text-left font-semibold">
               <Sparkles className="text-pp" size={20} /> <span className="flex-1">PalmPay Insights</span> <ChevronRight size={18} className="text-muted" />
             </button>
             <button onClick={() => setLanguage(language === "english" ? "pidgin" : "english")} className="flex w-full items-center gap-3 p-4 text-left font-semibold">
@@ -315,7 +355,7 @@ function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void
       <input
         ref={fileRef}
         type="file"
-        accept=".xlsx,.xls,.csv"
+        accept=".pdf,.xlsx,.xls,.csv"
         className="hidden"
         onChange={(e) => {
           onFile(e.target.files?.[0]);
@@ -333,12 +373,13 @@ function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void
         {(
           [
             ["home", "Home", HomeIcon],
-            ["insights", "Insights", Sparkles],
-            ["ask", "Ask", MessageCircle],
+            ["history", "History", List],
+            ["ask", "Insights", Sparkles],
+            ["insights", "Dashboard", LayoutDashboard],
             ["me", "Me", User],
           ] as const
         ).map(([id, label, Icon]) =>
-          id === "insights" ? (
+          id === "ask" ? (
             <button key={id} onClick={() => setTab(id)} className="-mt-5 flex flex-col items-center text-xs font-bold text-pp">
               <span className={`flex h-14 w-14 items-center justify-center rounded-full border-4 border-white shadow-card ${tab === id ? "bg-pp-dark" : "bg-pp"} text-white`}>
                 <Icon size={24} />
@@ -349,7 +390,7 @@ function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void
             <button
               key={id}
               onClick={() => setTab(id)}
-              className={`flex flex-col items-center px-4 py-1.5 text-xs font-semibold ${tab === id || (id === "home" && tab === "history") ? "text-pp" : "text-muted"}`}
+              className={`flex flex-col items-center px-2 py-1.5 text-xs font-semibold ${tab === id ? "text-pp" : "text-muted"}`}
             >
               <Icon size={22} />
               {label}

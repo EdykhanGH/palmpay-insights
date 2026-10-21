@@ -4,7 +4,9 @@ import type { Category, Insight, Txn } from "./types";
 // All the maths lives here, in plain code, so every number shown (and every number the AI repeats) is exact.
 
 const DAY = 86_400_000;
-const SPEND_EXCLUDE = new Set<Category>(["Savings"]);
+const SPEND_EXCLUDE = new Set<Category>(["Savings", "Transfers to self"]);
+// Moving your own money back in is not income.
+const NOT_INCOME = new Set<Category>(["From Savings"]);
 
 export interface Recurring {
   counterparty: string;
@@ -18,6 +20,8 @@ export interface Recurring {
 export interface Facts {
   asOf: string;
   balance: number;
+  /** False for statements without a balance column: `balance` is then just money in minus money out. */
+  balanceKnown: boolean;
   month: string;
   monthDay: number;
   daysInMonth: number;
@@ -35,12 +39,13 @@ export interface Facts {
   score: number;
   scoreParts: { label: string; points: number; max: number }[];
   monthly: { month: string; income: number; spend: number }[];
+  history: { from: string; loansIn: number; loansRepaid: number; interest: number; saved: number; toSelf: number; giving: number };
 }
 
 const t = (x: Txn) => new Date(x.date).getTime();
 const spendOf = (xs: Txn[]) =>
   xs.filter((x) => x.direction === "out" && !SPEND_EXCLUDE.has(x.category)).reduce((s, x) => s + x.amount + (x.fee ?? 0), 0);
-const incomeOf = (xs: Txn[]) => xs.filter((x) => x.direction === "in").reduce((s, x) => s + x.amount, 0);
+const incomeOf = (xs: Txn[]) => xs.filter((x) => x.direction === "in" && !NOT_INCOME.has(x.category)).reduce((s, x) => s + x.amount, 0);
 const median = (xs: number[]) => {
   if (!xs.length) return 0;
   const s = [...xs].sort((a, b) => a - b);
@@ -77,7 +82,7 @@ export function findRecurring(txns: Txn[], now: number): Recurring[] {
   return out.sort((a, b) => (b.amount * 30) / b.everyDays - (a.amount * 30) / a.everyDays);
 }
 
-export function computeFacts(txns: Txn[], openingBalance = 0): Facts {
+export function computeFacts(txns: Txn[], openingBalance?: number): Facts {
   const sorted = [...txns].sort((a, b) => t(a) - t(b));
   const last = sorted[sorted.length - 1];
   const now = last ? t(last) : Date.now();
@@ -86,8 +91,9 @@ export function computeFacts(txns: Txn[], openingBalance = 0): Facts {
   const monthDay = asOfD.getDate();
   const daysInMonth = new Date(asOfD.getFullYear(), asOfD.getMonth() + 1, 0).getDate();
 
+  const balanceKnown = last?.balance != null || openingBalance != null;
   const balance =
-    last?.balance ?? openingBalance + incomeOf(sorted) - sorted.filter((x) => x.direction === "out").reduce((s, x) => s + x.amount + (x.fee ?? 0), 0);
+    last?.balance ?? (openingBalance ?? 0) + sorted.filter((x) => x.direction === "in").reduce((s, x) => s + x.amount, 0) - sorted.filter((x) => x.direction === "out").reduce((s, x) => s + x.amount + (x.fee ?? 0), 0);
 
   const thisM = sorted.filter((x) => monthKey(x.date) === month);
   const prevDate = new Date(asOfD.getFullYear(), asOfD.getMonth() - 1, 1);
@@ -121,7 +127,7 @@ export function computeFacts(txns: Txn[], openingBalance = 0): Facts {
 
   const recip = new Map<string, { amount: number; count: number }>();
   for (const x of last30)
-    if (x.direction === "out" && /transfer/i.test(x.description)) {
+    if (x.direction === "out" && (x.category === "Transfers to people" || x.category === "Family & Friends" || /transfer|send to/i.test(x.description))) {
       const r = recip.get(x.counterparty) ?? { amount: 0, count: 0 };
       r.amount += x.amount;
       r.count++;
@@ -153,7 +159,7 @@ export function computeFacts(txns: Txn[], openingBalance = 0): Facts {
     const nxt = t(incomeTx[incomeTx.length - 1]) + median(gaps) * DAY;
     if (nxt > now) nextIncomeDate = new Date(nxt).toISOString().slice(0, 10);
   }
-  const runOutDate = dailyBurn > 0 ? new Date(now + (balance / dailyBurn) * DAY).toISOString().slice(0, 10) : null;
+  const runOutDate = balanceKnown && dailyBurn > 0 ? new Date(now + (balance / dailyBurn) * DAY).toISOString().slice(0, 10) : null;
 
   const thisIncome = incomeOf(thisM);
   const thisSaved = thisM.filter((x) => x.category === "Savings" && x.direction === "out").reduce((s, x) => s + x.amount, 0);
@@ -169,7 +175,7 @@ export function computeFacts(txns: Txn[], openingBalance = 0): Facts {
     { label: "Saving regularly", max: 25, points: Math.round(25 * Math.min(1, savingsRate / 0.1)) },
     { label: "Low betting", max: 20, points: last30Income ? Math.round(20 * Math.max(0, 1 - betting / last30Income / 0.1)) : 20 },
     { label: "Low fees", max: 10, points: Math.round(10 * Math.max(0, 1 - fees30 / 5000)) },
-    { label: "Cash cushion", max: 10, points: Math.round(10 * Math.min(1, dailyBurn ? balance / dailyBurn / 14 : 1)) },
+    { label: "Cash cushion", max: 10, points: balanceKnown ? Math.round(10 * Math.max(0, Math.min(1, dailyBurn ? balance / dailyBurn / 14 : 1))) : 5 },
   ];
   const score = scoreParts.reduce((s, p) => s + p.points, 0);
 
@@ -179,7 +185,20 @@ export function computeFacts(txns: Txn[], openingBalance = 0): Facts {
     return { month: m, income: incomeOf(xs), spend: spendOf(xs) };
   });
 
+  const sumCat = (cat: Category) => sorted.filter((x) => x.category === cat).reduce((s, x) => s + x.amount, 0);
+  const history = {
+    from: sorted[0]?.date.slice(0, 10) ?? "",
+    loansIn: sumCat("Loan received"),
+    loansRepaid: sumCat("Loan Repayment"),
+    interest: Math.round(sumCat("Interest") * 100) / 100,
+    saved: sumCat("Savings"),
+    toSelf: sumCat("Transfers to self"),
+    giving: sumCat("Church & Giving"),
+  };
+
   return {
+    history,
+    balanceKnown,
     asOf: last?.date ?? new Date().toISOString(),
     balance,
     month,
@@ -331,6 +350,36 @@ export function buildInsights(f: Facts): Insight[] {
       });
   }
 
+  const h = f.history;
+  const since = h.from ? new Date(h.from + "T12:00:00").toLocaleDateString("en-NG", { month: "short", year: "numeric" }) : "";
+  if (h.loansIn > 0 || h.loansRepaid > 0)
+    out.push({
+      id: "loans",
+      severity: "warn",
+      icon: "receipt",
+      title: `${naira(h.loansIn)} borrowed, ${naira(h.loansRepaid)} repaid since ${since}`,
+      body: h.loansRepaid > h.loansIn
+        ? `You've paid back ${naira(h.loansRepaid - h.loansIn)} more than you borrowed in this period. That's money that went to interest or earlier loans.`
+        : `Loans fill gaps, but each one comes back out of your next income.`,
+      action: "Build a ₦10,000 emergency buffer in CashBox",
+    });
+  if (h.interest > 0)
+    out.push({
+      id: "interest",
+      severity: "good",
+      icon: "piggy",
+      title: `Your savings earned ${naira(h.interest)} in interest`,
+      body: `Since ${since} you've put ${naira(h.saved)} into Spend & Save / CashBox. Small, steady saving adds up. Raising your save rate earns more every day.`,
+    });
+  if (h.toSelf > 0)
+    out.push({
+      id: "self",
+      severity: "tip",
+      icon: "users",
+      title: `${naira(h.toSelf)} moved to your own other accounts`,
+      body: `That's not spending, so we've left it out of your totals. Keeping more of it in PalmPay CashBox would earn daily interest.`,
+    });
+
   const rank = { alert: 0, warn: 1, tip: 2, good: 3 };
   return out.sort((a, b) => rank[a.severity] - rank[b.severity]);
 }
@@ -339,7 +388,7 @@ export function buildInsights(f: Facts): Insight[] {
 export function factSheet(f: Facts, insights: Insight[]) {
   return {
     as_of: f.asOf.slice(0, 10),
-    balance: Math.round(f.balance),
+    balance: f.balanceKnown ? Math.round(f.balance) : "unknown (statement has no balance column)",
     this_month: { ...f.thisMonth, day: f.monthDay, days_in_month: f.daysInMonth },
     last_month_same_point: f.lastMonthSameDay,
     last_30_days: f.last30,
@@ -350,6 +399,7 @@ export function factSheet(f: Facts, insights: Insight[]) {
     projected_run_out: f.runOutDate,
     next_income_expected: f.nextIncomeDate,
     money_health_score: f.score,
+    whole_history: f.history,
     detected_insights: insights.map((i) => `${i.title}. ${i.body}`),
   };
 }
