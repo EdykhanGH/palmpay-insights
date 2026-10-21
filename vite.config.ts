@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import legacy from "@vitejs/plugin-legacy";
 
 // Serves the Vercel functions in api/ during `npm run dev`, so the AI works locally too.
 function localApi(): Plugin {
@@ -29,5 +30,13 @@ function localApi(): Plugin {
 
 export default defineConfig(({ mode }) => {
   Object.assign(process.env, loadEnv(mode, process.cwd(), ""));
-  return { plugins: [react(), localApi()] };
+  return {
+    plugins: [
+      react(),
+      // Polyfills for older phone browsers and in-app webviews (WhatsApp, Instagram, older Safari).
+      legacy({ targets: ["defaults", "iOS >= 12", "Safari >= 12", "Chrome >= 64", "Android >= 7"], modernPolyfills: true }),
+      localApi(),
+    ],
+    build: { sourcemap: true },
+  };
 });
