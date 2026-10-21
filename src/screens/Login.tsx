@@ -1,6 +1,9 @@
-import { Delete, Fingerprint, ShieldCheck } from "lucide-react";
+import { ChevronRight, Delete, Fingerprint } from "lucide-react";
 import { useState } from "react";
-import { ACCOUNTS, DEMO_PIN } from "../lib/accounts";
+import { ACCOUNTS, DEMO_PIN, maskPhone } from "../lib/accounts";
+
+// The account shown as a saved login on this device.
+const SAVED = ACCOUNTS[0];
 
 export default function Login({ onLogin }: { onLogin: (personaId: string) => void }) {
   const [phone, setPhone] = useState("");
@@ -12,7 +15,7 @@ export default function Login({ onLogin }: { onLogin: (personaId: string) => voi
 
   function next() {
     if (!/^0\d{10}$/.test(phone)) return setError("Enter your 11-digit phone number, e.g. 08012345678");
-    if (!account) return setError("No PalmPay account with this number. Try one of the demo accounts below.");
+    if (!account) return setError("No PalmPay account found with this number.");
     setError(null);
     setStep("pin");
   }
@@ -62,25 +65,21 @@ export default function Login({ onLogin }: { onLogin: (personaId: string) => voi
               Continue
             </button>
 
-            <div className="mt-8 rounded-2xl bg-pp-soft p-4">
-              <div className="text-xs font-bold uppercase tracking-wide text-pp">Demo accounts · PIN {DEMO_PIN}</div>
-              <div className="mt-2 space-y-2">
-                {ACCOUNTS.map((a) => (
-                  <button
-                    key={a.phone}
-                    onClick={() => {
-                      setPhone(a.phone);
-                      setError(null);
-                      setStep("pin");
-                    }}
-                    className="flex w-full items-center justify-between rounded-xl bg-white px-3 py-2 text-left text-sm shadow-card"
-                  >
-                    <span className="font-semibold">{a.fullName}</span>
-                    <span className="text-muted">{a.phone}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+            <button
+              onClick={() => {
+                setPhone(SAVED.phone);
+                setError(null);
+                setStep("pin");
+              }}
+              className="mt-8 flex w-full items-center gap-3 rounded-2xl bg-white p-3 text-left shadow-card"
+            >
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-pp text-lg font-extrabold text-white">{SAVED.fullName[0]}</span>
+              <span className="flex-1">
+                <span className="block font-bold">{SAVED.fullName}</span>
+                <span className="block text-sm text-muted">{maskPhone(SAVED.phone)}</span>
+              </span>
+              <ChevronRight className="text-pp" />
+            </button>
           </>
         ) : (
           <>
@@ -94,7 +93,7 @@ export default function Login({ onLogin }: { onLogin: (personaId: string) => voi
               {["1", "2", "3", "4", "5", "6", "7", "8", "9", "bio", "0", "del"].map((k) => (
                 <button
                   key={k}
-                  onClick={() => (k === "bio" ? setError("Fingerprint isn't available in the demo. Use PIN " + DEMO_PIN) : press(k))}
+                  onClick={() => (k === "bio" ? setError("Fingerprint isn't set up on this device. Please use your PIN.") : press(k))}
                   className="flex h-16 items-center justify-center rounded-2xl text-2xl font-bold hover:bg-pp-soft active:bg-pp-soft"
                   aria-label={k === "del" ? "Delete" : k === "bio" ? "Fingerprint" : k}
                 >
@@ -112,9 +111,6 @@ export default function Login({ onLogin }: { onLogin: (personaId: string) => voi
         )}
       </div>
 
-      <div className="flex items-center justify-center gap-1.5 py-6 text-xs text-muted">
-        <ShieldCheck size={14} /> Hackathon prototype · demo data only
-      </div>
     </div>
   );
 }
