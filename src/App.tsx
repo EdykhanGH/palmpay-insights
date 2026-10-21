@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Ask, { type PendingQuestion } from "./components/Ask";
 import { CategoryBars, MonthlyBars } from "./components/Charts";
 import { InsightCard, ScoreRing, Section } from "./components/ui";
-import { accountFor, maskPhone, saveSession, savedSession } from "./lib/accounts";
+import { accountFor, maskPhone } from "./lib/accounts";
 import { buildInsights, computeFacts, factSheet, perMonth } from "./lib/analyse";
 import { monthName, naira, prettyDate } from "./lib/format";
 import { overviewText } from "./lib/localAnswer";
@@ -17,29 +17,10 @@ import Login from "./screens/Login";
 type Tab = "home" | "insights" | "ask" | "history" | "me";
 
 export default function App() {
-  const [user, setUser] = useState<string | null>(() => {
-    const s = savedSession();
-    return s && accountFor(s) ? s : null;
-  });
-  if (!user)
-    return (
-      <Login
-        onLogin={(id) => {
-          saveSession(id);
-          setUser(id);
-        }}
-      />
-    );
-  return (
-    <Main
-      key={user}
-      personaId={user}
-      onLogout={() => {
-        saveSession(null);
-        setUser(null);
-      }}
-    />
-  );
+  // Session lives in memory only, so every visit or refresh starts at the login screen.
+  const [user, setUser] = useState<string | null>(null);
+  if (!user) return <Login onLogin={setUser} />;
+  return <Main key={user} personaId={user} onLogout={() => setUser(null)} />;
 }
 
 function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void }) {

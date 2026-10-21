@@ -15,25 +15,6 @@ export const ACCOUNTS: Account[] = [
   { personaId: "kemi", fullName: "Kemi Adewale", phone: "08034567890", tier: "Tier 2" },
 ];
 
-const KEY = "ppi-session";
-
-export function savedSession(): string | null {
-  try {
-    return localStorage.getItem(KEY);
-  } catch {
-    return null;
-  }
-}
-
-export function saveSession(personaId: string | null) {
-  try {
-    if (personaId) localStorage.setItem(KEY, personaId);
-    else localStorage.removeItem(KEY);
-  } catch {
-    // private mode: session just won't persist
-  }
-}
-
 export const accountFor = (personaId: string) => ACCOUNTS.find((a) => a.personaId === personaId);
 
 export const maskPhone = (p: string) => p.slice(0, 4) + "****" + p.slice(-3);
