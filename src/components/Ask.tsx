@@ -51,8 +51,13 @@ export default function Ask({ txns, name, language, facts, sheet, insights, over
   const end = useRef<HTMLDivElement>(null);
 
   // New data starts a fresh conversation.
-  useEffect(() => setMsgs([]), [txns]);
-  useEffect(() => end.current?.scrollIntoView({ behavior: "smooth", block: "end" }), [msgs, busy]);
+  useEffect(() => {
+    setMsgs([]);
+  }, [txns]);
+  // Block bodies on purpose: newer Chrome returns a value from scroll calls, which React would treat as a cleanup function.
+  useEffect(() => {
+    end.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [msgs, busy]);
   useEffect(() => {
     if (pending) ask(pending.text);
     // eslint-disable-next-line react-hooks/exhaustive-deps

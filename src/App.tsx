@@ -83,7 +83,9 @@ function Main({ personaId, onLogout }: { personaId: string; onLogout: () => void
     };
   }, [sheet, firstName, language]);
 
-  useEffect(() => window.scrollTo(0, 0), [tab]);
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [tab]);
 
   async function onFile(f: File | undefined) {
     if (!f) return;
